@@ -4,7 +4,7 @@
 
 # HuaweiPods
 
-**Huawei audio device integration for Xiaomi HyperOS**
+**Huawei audio device support for HyperOS and ColorOS**
 
 [![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)](https://android.com)
 [![LSPosed](https://img.shields.io/badge/Framework-LSPosed-blueviolet?style=flat-square)](https://github.com/LSPosed/LSPosed)
@@ -16,7 +16,9 @@
 
 </div>
 
-HuaweiPods is an Xposed module for Xiaomi HyperOS. It integrates supported Huawei audio devices with the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page.
+HuaweiPods is an Xposed module for Android 15+. HyperOS integration includes the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page. ColorOS currently has experimental core protocol support and a My Devices headset-detail entry that opens HuaweiPods for FreeClip battery data.
+
+> The My Devices entry was verified against OnePlus PLK110 (ColorOS 16.1, `com.heytap.mydevices` 17.4.15). This is not yet a complete ColorOS system panel; private hosts change between system updates, so other builds may fall back to the module UI and standard Bluetooth detail page.
 
 The unified build supports the 14 models below in one APK. Model-specific test APKs are no longer distributed.
 
@@ -58,7 +60,7 @@ The unified build supports the 14 models below in one APK. Model-specific test A
 
 ## Requirements
 
-- Xiaomi / Redmi device running HyperOS.
+- Xiaomi / Redmi HyperOS or OPPO / OnePlus / realme ColorOS device.
 - Android 15+.
 - LSPosed API version >= 101.
 - A paired device listed in the support table above.
@@ -67,13 +69,11 @@ The unified build supports the 14 models below in one APK. Model-specific test A
 
 1. Install the HuaweiPods APK and follow the first-run guide to check LSPosed and the core scopes.
 2. Enable the module in LSPosed.
-3. Select the recommended scopes:
-   - `com.android.bluetooth`
-   - `com.android.settings`
-   - `com.milink.service`
-   - `com.xiaomi.bluetooth`
+3. Select the scopes for your system:
+   - ColorOS: `com.android.bluetooth` and `com.heytap.mydevices` (`com.android.settings` is optional for the standard Bluetooth detail page).
+   - Full HyperOS integration: `com.android.bluetooth`, `com.android.settings`, `com.milink.service`, and `com.xiaomi.bluetooth`.
 4. Reboot the phone, or restart the scoped apps from HuaweiPods.
-5. Connect a supported device and view its integrated capabilities in HuaweiPods, Super Island, Fusion Device Center, or the system Bluetooth detail page. Modern models are identified from their protocol identity; if a renamed or legacy device is not identified, select its actual model once in HuaweiPods.
+5. Connect a supported device and view its capabilities in HuaweiPods. HyperOS also provides Super Island, Fusion Device Center, and the integrated system Bluetooth page. Modern models are identified from their protocol identity; if a renamed or legacy device is not identified, select its actual model once in HuaweiPods.
 
 The release build no longer needs to install, run, or hook HUAWEI AI Life Audio for official images. Modern models provide the model and color identity over Bluetooth; legacy models can browse the verified Huawei color catalog in the image settings and ask the user to confirm once. Failures always fall back to cached or bundled images and never guess the default color.
 

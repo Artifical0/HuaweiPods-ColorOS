@@ -22,6 +22,7 @@ open class HookEntry : XposedModule() {
             "com.android.bluetooth" -> {
                 loadHook(HeadsetStateDispatcher, param.defaultClassLoader, param.packageName)
                 loadHook(BluetoothUpstreamHeadsetHook(), param.defaultClassLoader, param.packageName)
+                loadHook(MiBluetoothToastHook, param.defaultClassLoader, param.packageName)
             }
             "com.android.settings" -> loadHook(SettingsHeadsetHook, param.defaultClassLoader, param.packageName)
             "com.milink.service" -> loadHook(MiLinkServiceHook, param.defaultClassLoader, param.packageName)
@@ -29,6 +30,8 @@ open class HookEntry : XposedModule() {
                 loadHook(MiBluetoothToastHook, param.defaultClassLoader, param.packageName)
                 loadHook(BluetoothUpstreamHeadsetHook(), param.defaultClassLoader, param.packageName)
             }
+            "com.heytap.mydevices" ->
+                loadHook(ColorOsMyDevicesHook, param.defaultClassLoader, param.packageName)
         }
     }
 

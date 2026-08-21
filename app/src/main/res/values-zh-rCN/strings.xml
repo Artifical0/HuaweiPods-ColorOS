@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">HuaweiPods</string>
-    <string name="app_description">为小米 HyperOS 适配华为耳机</string>
-    <string name="app_subtitle">华为耳机适配 HyperOS</string>
+    <string name="app_description">为 HyperOS 与 ColorOS 适配华为耳机</string>
+    <string name="app_subtitle">华为耳机适配 HyperOS / ColorOS</string>
     <string name="pod_info">耳机信息</string>
     <string name="about">关于 HuaweiPods</string>
     <string name="settings">设置</string>
@@ -134,6 +134,7 @@
     <string name="restart_scope_milink_service">互联互通服务</string>
     <string name="restart_scope_mi_bluetooth">小米蓝牙</string>
     <string name="restart_scope_smart_audio">智慧音频（空间音频同步）</string>
+    <string name="restart_scope_my_devices">我的设备（ColorOS 耳机详情）</string>
     <string name="documentation_title">使用文档</string>
     <string name="documentation_load_failed">文档暂时无法加载</string>
     <string name="documentation_load_failed_summary">请检查网络后重试。站内内容会留在 App 中，外部链接仍由系统浏览器打开。</string>
@@ -200,7 +201,7 @@
     <string name="onboarding_page_status">第 %1$d 页，共 %2$d 页</string>
     <string name="onboarding_start">开始使用</string>
     <string name="onboarding_welcome_title">欢迎使用 HuaweiPods</string>
-    <string name="onboarding_welcome_summary">在小米 HyperOS 上查看电量并使用已适配的耳机功能</string>
+    <string name="onboarding_welcome_summary">在 HyperOS 或 ColorOS 上查看电量并使用已适配的耳机功能</string>
     <string name="onboarding_welcome_label">更简单的耳机体验</string>
     <string name="onboarding_environment_title">环境检查</string>
     <string name="onboarding_environment_summary">确认模块服务与核心作用域状态；缺少时仍可继续，稍后到 LSPosed 设置</string>

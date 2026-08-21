@@ -33,6 +33,7 @@ import java.util.Date
 import java.util.Locale
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.R
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.ui.components.AppIcons
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -55,7 +56,13 @@ fun HomePage(
 ) {
     val context = LocalContext.current
     val systemInfo = remember { homeSystemInfo(context) }
-    val active = remember(xposedService) { hasRequiredBluetoothScopes(xposedService) }
+    val active = remember(xposedService) {
+        hasRequiredBluetoothScopes(
+            service = xposedService,
+            manufacturer = Build.MANUFACTURER,
+            brand = Build.BRAND,
+        )
+    }
     val inactiveSummary = if (xposedService == null) {
         "等待 LSPosed 服务连接"
     } else {
@@ -191,15 +198,15 @@ private fun StatusCard(active: Boolean, inactiveSummary: String, bluetoothServic
     }
 }
 
-private val requiredBluetoothScopes = setOf(
-    "com.android.bluetooth",
-    "com.xiaomi.bluetooth",
-)
-
-private fun hasRequiredBluetoothScopes(service: XposedService?): Boolean {
+private fun hasRequiredBluetoothScopes(
+    service: XposedService?,
+    manufacturer: String?,
+    brand: String?,
+): Boolean {
     if (service == null) return false
     return runCatching {
-        service.scope.containsAll(requiredBluetoothScopes)
+        val family = RomIntegrationPolicy.detect(manufacturer, brand)
+        service.scope.containsAll(RomIntegrationPolicy.requiredCoreScopes(family))
     }.getOrDefault(false)
 }
 

@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.platform.SystemHeadsetSettingsIntent
 import moe.chenxy.huaweipods.pods.UNKNOWN_HUAWEI_ANC_SUBMODE
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
 import moe.chenxy.huaweipods.pods.defaultAncSubMode
@@ -146,16 +147,7 @@ class PopupActivity : ComponentActivity() {
             openModule()
             return
         }
-        val intent = Intent().apply {
-            setClassName("com.android.settings", "com.android.settings.bluetooth.MiuiHeadsetActivity")
-            putExtra("android.bluetooth.device.extra.DEVICE", bluetoothDevice)
-            putExtra("bluetoothaddress", bluetoothDevice.address)
-            putExtra("MIUI_HEADSET_SUPPORT", ConfigManager.fakeSupport())
-            putExtra("COME_FROM", "MIUI_BLUETOOTH_SETTINGS")
-            putExtra("DEVICE_ID", ConfigManager.fakeDeviceId())
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        runCatching { startActivity(intent) }.onFailure { openModule() }
+        if (!SystemHeadsetSettingsIntent.open(this, bluetoothDevice)) openModule()
     }
 
     private fun Intent.parcelableDevice(key: String): BluetoothDevice? {

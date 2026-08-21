@@ -4,7 +4,7 @@
 
 # HuaweiPods
 
-**让华为耳机接入小米 HyperOS 的系统体验**
+**让华为耳机接入 HyperOS，并提供 ColorOS 核心协议支持**
 
 [![Android 15+](https://img.shields.io/badge/Android-15%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://www.android.com/)
 [![HyperOS](https://img.shields.io/badge/ROM-HyperOS-FF6900?style=flat-square)](https://hyperos.mi.com/)
@@ -21,7 +21,11 @@ QQ群 `1022359908`
 
 </div>
 
-HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将华为耳机接入系统蓝牙详情页、连接弹窗、超级岛与融合设备中心。
+HuaweiPods 是一个面向 Android 15+ 的 Xposed 模块。HyperOS 已接入系统蓝牙详情页、连接弹窗、超级岛与融合设备中心；ColorOS 当前提供实验性的核心协议支持，并可从“我的设备”耳机详情页进入 HuaweiPods 查看 FreeClip 电量。
+
+> ColorOS 说明：已针对 OnePlus PLK110（ColorOS 16.1、`com.heytap.mydevices` 17.4.15）接入“我的设备”详情入口，目前仍不是完整的 ColorOS 系统面板。私有宿主会随系统更新变化，其他版本可能仅保留模块内电量和通用蓝牙详情页。
+
+连接手机并启用 USB 调试后，可在 Windows PowerShell 运行 `./tools/capture-coloros-environment.ps1`，生成不含日志、账号和蓝牙地址的宿主环境包，供下一阶段适配使用。
 
 > 当前统一版已集成下列 14 个型号，所有型号使用同一个 APK，不再按型号单独分发测试包。
 
@@ -64,8 +68,8 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 
 ## 使用要求
 
-- 小米或 Redmi 设备
-- HyperOS，Android 15 及以上
+- 小米 / Redmi HyperOS，或 OPPO / OnePlus / realme ColorOS 设备
+- Android 15 及以上
 - LSPosed API 101 及以上
 - 表中任一已集成型号
 
@@ -73,15 +77,13 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 
 1. 从 [GitHub Releases](https://github.com/Nshpiter/HuaweiPods/releases) 下载并安装 APK；首次打开可按引导检查 LSPosed 与核心作用域。
 2. 在 LSPosed 中启用 HuaweiPods。
-3. 勾选以下作用域：
+3. 按系统勾选作用域：
 
-   - `com.android.bluetooth`
-   - `com.android.settings`
-   - `com.milink.service`
-   - `com.xiaomi.bluetooth`
+   - ColorOS：`com.android.bluetooth`、`com.heytap.mydevices`（可选勾选 `com.android.settings`，用于打开通用蓝牙详情页）
+   - HyperOS 完整集成：`com.android.bluetooth`、`com.android.settings`、`com.milink.service`、`com.xiaomi.bluetooth`
 
 4. 在 HuaweiPods 内重启相关作用域，或重启手机。
-5. 连接设备后，即可在 HuaweiPods、蓝牙详情页、超级岛或融合设备中心查看已接入能力。现代型号会直接读取设备标识；改名设备或旧协议型号识别失败时，再在 HuaweiPods 中选择一次真实型号。
+5. 连接设备后，即可在 HuaweiPods 查看已接入能力；HyperOS 还可使用蓝牙详情页、超级岛或融合设备中心。现代型号会直接读取设备标识；改名设备或旧协议型号识别失败时，再在 HuaweiPods 中选择一次真实型号。
 
 正式版不需要安装或运行华为智慧音频来获取图片：现代型号由蓝牙协议直接确认机型与配色，旧协议型号可在图片设置中检索华为官方配色并手动确认。下载失败时始终回退到已有缓存或内置图，不会猜测默认配色。
 

@@ -10,10 +10,12 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Build
 import android.widget.Toast
 import kotlinx.serialization.json.Json
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.hook.Log
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.utils.SystemApisUtils.isHyperOS
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.IconParams
@@ -26,6 +28,11 @@ import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 @SuppressLint("WrongConstant")
 object MiuiStrongToastUtil {
     var lastPodsTimestamp = -1L
+
+    private fun notificationHostPackage(): String =
+        RomIntegrationPolicy.notificationHostPackage(
+            RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND),
+        )
 
     fun showStringToast(context: Context, text: String?, colorType: Int) {
         if (!isHyperOS) {
@@ -108,7 +115,7 @@ object MiuiStrongToastUtil {
         val intent = Intent(HuaweiPodsAction.ACTION_SEND_STRONG_TOAST)
         intent.putExtra("batteryParams", batteryParams)
         intent.putExtra("address", device?.address.orEmpty())
-        intent.`package` = "com.xiaomi.bluetooth"
+        intent.`package` = notificationHostPackage()
         context.sendBroadcast(intent)
     }
 
@@ -120,7 +127,7 @@ object MiuiStrongToastUtil {
         val intent = Intent(HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION)
         intent.putExtra("batteryParams", batteryParams)
         intent.putExtra("device", device)
-        intent.`package` = "com.xiaomi.bluetooth"
+        intent.`package` = notificationHostPackage()
         context.sendBroadcast(intent)
     }
 
@@ -130,7 +137,7 @@ object MiuiStrongToastUtil {
     ) {
         val intent = Intent(HuaweiPodsAction.ACTION_CANCEL_PODS_NOTIFICATION)
         intent.putExtra("device", device)
-        intent.`package` = "com.xiaomi.bluetooth"
+        intent.`package` = notificationHostPackage()
         context.sendBroadcast(intent)
     }
 

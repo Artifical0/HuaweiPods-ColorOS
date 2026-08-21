@@ -54,6 +54,7 @@ import moe.chenxy.huaweipods.config.PodImagePrefs
 import moe.chenxy.huaweipods.config.PodImageChangeNotifier
 import moe.chenxy.huaweipods.config.PodImageResource
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.platform.SystemHeadsetSettingsIntent
 import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.UNKNOWN_HUAWEI_ANC_SUBMODE
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
@@ -766,16 +767,8 @@ fun MainUI(
             Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
             return
         }
-        Intent().apply {
-            setClassName("com.android.settings", "com.android.settings.bluetooth.MiuiHeadsetActivity")
-            putExtra("android.bluetooth.device.extra.DEVICE", device)
-            putExtra("bluetoothaddress", device.address)
-            putExtra("MIUI_HEADSET_SUPPORT", ConfigManager.fakeSupport())
-            putExtra("COME_FROM", "MIUI_BLUETOOTH_SETTINGS")
-            putExtra("DEVICE_ID", ConfigManager.fakeDeviceId())
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            runCatching { context.startActivity(this) }
-                .onFailure { Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show() }
+        if (!SystemHeadsetSettingsIntent.open(context, device)) {
+            Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -927,6 +920,7 @@ fun MainUI(
                 onPersistentNotificationEnabledChange = {
                     persistentNotificationEnabled.value = it
                     ConfigManager.updatePersistentNotificationEnabled(prefs, xposedService, it)
+                    broadcastConfigChanged(context, "com.android.bluetooth")
                     broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                 },
                 lockscreenNotificationEnabled = lockscreenNotificationEnabled,
@@ -951,6 +945,7 @@ fun MainUI(
                 onNotificationClickActionChange = {
                     notificationClickAction.value = it
                     ConfigManager.updateNotificationClickAction(prefs, xposedService, it)
+                    broadcastConfigChanged(context, "com.android.bluetooth")
                     broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                 },
                 moreClickAction = moreClickAction,

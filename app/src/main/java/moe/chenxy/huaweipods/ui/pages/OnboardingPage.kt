@@ -76,16 +76,12 @@ import androidx.compose.ui.unit.sp
 import io.github.libxposed.service.XposedService
 import kotlinx.coroutines.delay
 import moe.chenxy.huaweipods.R
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private const val PAGE_TRANSITION_MS = 360L
-
-private val requiredCoreScopes = setOf(
-    "com.android.bluetooth",
-    "com.xiaomi.bluetooth",
-)
 
 private fun colorWithWhiteTextContrast(source: Color): Color {
     var result = source
@@ -519,7 +515,15 @@ private fun EnvironmentDetails(
     var refreshVersion by remember { mutableIntStateOf(0) }
     val serviceConnected = xposedService != null
     val coreScopesReady = remember(xposedService, refreshVersion) {
-        runCatching { xposedService?.scope?.containsAll(requiredCoreScopes) == true }
+        runCatching {
+            val family = RomIntegrationPolicy.detect(
+                manufacturer = android.os.Build.MANUFACTURER,
+                brand = android.os.Build.BRAND,
+            )
+            xposedService?.scope?.containsAll(
+                RomIntegrationPolicy.requiredCoreScopes(family),
+            ) == true
+        }
             .getOrDefault(false)
     }
 

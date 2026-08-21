@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">HuaweiPods</string>
-    <string name="app_description">Huawei earphone support for Xiaomi HyperOS</string>
-    <string name="app_subtitle">Huawei earphones for HyperOS</string>
+    <string name="app_description">Huawei earphone support for HyperOS and ColorOS</string>
+    <string name="app_subtitle">Huawei earphones for HyperOS and ColorOS</string>
     <string name="pod_info">Pod Info</string>
     <string name="about">About HuaweiPods</string>
     <string name="settings">Settings</string>
@@ -133,6 +133,7 @@
     <string name="restart_scope_milink_service">Interconnectivity Service</string>
     <string name="restart_scope_mi_bluetooth">Mi Bluetooth</string>
     <string name="restart_scope_smart_audio">Smart Audio (spatial sync)</string>
+    <string name="restart_scope_my_devices">My Devices (ColorOS headset detail)</string>
     <string name="documentation_title">Documentation</string>
     <string name="documentation_load_failed">Documentation is unavailable</string>
     <string name="documentation_load_failed_summary">Check your connection and retry. Site pages stay in the app, while external links open in your browser.</string>
@@ -199,7 +200,7 @@
     <string name="onboarding_page_status">Page %1$d of %2$d</string>
     <string name="onboarding_start">Get started</string>
     <string name="onboarding_welcome_title">Welcome to HuaweiPods</string>
-    <string name="onboarding_welcome_summary">View battery levels and use supported earphone features on Xiaomi HyperOS</string>
+    <string name="onboarding_welcome_summary">View battery levels and use supported earphone features on HyperOS or ColorOS</string>
     <string name="onboarding_welcome_label">A simpler earphone experience</string>
     <string name="onboarding_environment_title">Environment check</string>
     <string name="onboarding_environment_summary">Check the module service and core scopes. You can continue and configure missing items in LSPosed later.</string>

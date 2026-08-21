@@ -32,17 +32,29 @@ object HeadsetStateDispatcher : HookContext() {
     private const val ROUTE_PROBE_WATCHDOG_MS = 5_500L
 
     private var appRequestReceiverRegistered = false
+    @Volatile
+    private var a2dpService: Any? = null
     private val connectedA2dpAddresses = ConcurrentHashMap.newKeySet<String>()
     private val activeRouteProbe = AtomicReference<HuaweiDeviceRouteProbeSession?>(null)
     private val lastRouteProbeStartedAtMs = ConcurrentHashMap<String, Long>()
 
     override fun onHook() {
         runCatching {
-            hookAfter(findMethod("com.android.bluetooth.btservice.AdapterService", "onCreate")) {
-                registerAppRequestReceiver(instance as? Context)
+            val serviceClass = findClass("com.android.bluetooth.a2dp.A2dpService")
+            serviceClass.declaredConstructors.forEach { constructor ->
+                constructor.isAccessible = true
+                hookConstructorAfter(constructor) {
+                    val service = instance ?: return@hookConstructorAfter
+                    val context = service as? Context
+                        ?: args.firstOrNull { it is Context } as? Context
+                        ?: return@hookConstructorAfter
+                    a2dpService = service
+                    registerAppRequestReceiver(context)
+                    scheduleConnectedHuaweiPodsRestore(context, service)
+                }
             }
         }.onFailure {
-            Log.w("HuaweiPods", "AdapterService.onCreate hook skipped", it)
+            Log.e("HuaweiPods", "A2dpService startup restore hook failed", it)
         }
 
         hookAfter(findMethodByParamCount("com.android.bluetooth.a2dp.A2dpService", "handleConnectionStateChanged", 3)) {
@@ -86,6 +98,48 @@ object HeadsetStateDispatcher : HookContext() {
     }
 
     @SuppressLint("MissingPermission")
+    private fun scheduleConnectedHuaweiPodsRestore(context: Context, service: Any) {
+        Log.i("HuaweiPods", "Scheduled connected Huawei device restore from A2DP service")
+        val handler = Handler(context.mainLooper)
+        listOf(1_500L, 4_500L).forEach { delayMs ->
+            handler.postDelayed(
+                { restoreConnectedHuaweiPods(context, service) },
+                delayMs,
+            )
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun restoreConnectedHuaweiPods(context: Context, service: Any? = a2dpService) {
+        val connectedDevices = service?.let { currentService ->
+            runCatching {
+                @Suppress("UNCHECKED_CAST")
+                (callMethod(currentService, "getConnectedDevices") as? List<*>)
+                    ?.filterIsInstance<BluetoothDevice>()
+                    .orEmpty()
+            }.onFailure {
+                Log.w("HuaweiPods", "A2DP connected-device restore query failed", it)
+            }.getOrDefault(emptyList())
+        }.orEmpty()
+        val candidates = if (connectedDevices.isNotEmpty()) {
+            connectedDevices
+        } else {
+            val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
+            runCatching { adapter.bondedDevices.orEmpty().filter(::isDeviceConnected) }
+                .onFailure { Log.w("HuaweiPods", "Bonded-device restore fallback failed", it) }
+                .getOrDefault(emptyList())
+        }
+        candidates
+            .filter(::isHuaweiPod)
+            .forEach { device ->
+                val address = device.address.uppercase()
+                if (!connectedA2dpAddresses.add(address)) return@forEach
+                HuaweiHfpController.connectPod(context, device)
+                Log.i("HuaweiPods", "Restored connected Huawei device after Bluetooth restart")
+            }
+    }
+
+    @SuppressLint("MissingPermission")
     private fun registerAppRequestReceiver(context: Context?) {
         if (context == null || appRequestReceiverRegistered) return
         val registered = runCatching {
@@ -97,6 +151,7 @@ object HeadsetStateDispatcher : HookContext() {
                         when (HuaweiPodsAction.canonical(receivedIntent.action)) {
                             HuaweiPodsAction.ACTION_PODS_UI_INIT,
                             HuaweiPodsAction.ACTION_REFRESH_STATUS -> {
+                                restoreConnectedHuaweiPods(context)
                                 context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_MODULE_BLUETOOTH_SERVICE_ALIVE).apply {
                                     setPackage(BuildConfig.APPLICATION_ID)
                                     putExtra(HuaweiPodsAction.EXTRA_MODULE_BUILD_ID, BuildConfig.MODULE_BUILD_ID)
