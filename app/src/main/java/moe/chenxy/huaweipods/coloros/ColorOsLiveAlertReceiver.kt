@@ -209,7 +209,10 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .apply { largeIcon?.let(::setLargeIcon) }
             .apply {
-                if (Build.VERSION.SDK_INT >= 36) {
+                if (
+                    Build.VERSION.SDK_INT >= 36 &&
+                    Build.VERSION.SDK_INT_FULL >= Build.VERSION_CODES_FULL.BAKLAVA_1
+                ) {
                     setRequestPromotedOngoing(true)
                     colorOsLiveAlertChipText(left, right, case)?.let(::setShortCriticalText)
                 }
