@@ -82,18 +82,34 @@ object HeadsetStateDispatcher : HookContext() {
                     registerAppRequestReceiver(context)
                     if (!isHuawei) return@runCatching
 
-                    val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
                     if (currState == BluetoothHeadset.STATE_CONNECTED) {
-                        statusBarManager.setIconVisibility("wireless_headset", true)
+                        updateHeadsetStatusBarIcon(context, visible = true)
                         HuaweiHfpController.connectPod(context, device)
                     } else if (currState == BluetoothHeadset.STATE_DISCONNECTING || currState == BluetoothHeadset.STATE_DISCONNECTED) {
-                        statusBarManager.setIconVisibility("wireless_headset", false)
+                        updateHeadsetStatusBarIcon(context, visible = false)
                         HuaweiHfpController.disconnectedPod(context, device)
                     }
                 }.onFailure {
                     Log.e("HuaweiPods", "A2DP state callback failed without interrupting Bluetooth", it)
                 }
             }
+        }
+    }
+
+    /**
+     * ColorOS 16 removes STATUS_BAR permission from the Bluetooth UID. The icon is
+     * cosmetic, so a vendor permission denial must never abort Huawei session setup
+     * or notification cleanup.
+     */
+    private fun updateHeadsetStatusBarIcon(context: Context, visible: Boolean) {
+        runCatching {
+            val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
+            statusBarManager.setIconVisibility("wireless_headset", visible)
+        }.onFailure {
+            Log.d(
+                "HuaweiPods",
+                "System headset status-bar icon unavailable; continuing session",
+            )
         }
     }
 

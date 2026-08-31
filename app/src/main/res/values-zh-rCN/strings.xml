@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">HuaweiPods</string>
-    <string name="app_description">为 HyperOS 与 ColorOS 适配华为耳机</string>
-    <string name="app_subtitle">华为耳机适配 HyperOS / ColorOS</string>
+    <string name="app_name">HuaweiPods ColorOS</string>
+    <string name="app_description">独立的 ColorOS 华为耳机适配模块</string>
+    <string name="app_subtitle">ColorOS 华为耳机独立适配版</string>
+    <string name="coloros_live_alert_channel">耳机流体云</string>
+    <string name="coloros_live_alert_fallback_title">HUAWEI FreeClip</string>
+    <string name="coloros_live_alert_settings">ColorOS 流体云</string>
+    <string name="coloros_live_alert_settings_summary">打开系统通知设置并开启“实时提醒”</string>
+    <string name="coloros_background_settings">ColorOS 自启动管理</string>
+    <string name="coloros_background_settings_summary">允许自启动和后台活动，让弹窗与流体云能稳定唤醒</string>
     <string name="pod_info">耳机信息</string>
     <string name="about">关于 HuaweiPods</string>
     <string name="settings">设置</string>
@@ -117,6 +123,9 @@
     <string name="lockscreen_notification_summary">允许已启用的耳机常驻通知显示在锁屏和息屏界面</string>
     <string name="persistent_notification">耳机常驻通知</string>
     <string name="persistent_notification_summary">在通知栏显示耳机连接状态和电量</string>
+    <string name="freeclip_adaptive_channels">左右耳机自适应</string>
+    <string name="freeclip_adaptive_channels_summary">自动识别佩戴方向并校正左右声道</string>
+    <string name="freeclip_drop_reminder_summary">在 ColorOS 上由耳机播放掉落提示音；手机通知与语音播报属于华为手机能力</string>
     <string name="island_mode_none">不显示</string>
     <string name="island_mode_official">系统原生（部分机型可用）</string>
     <string name="island_mode_module">模块（推荐）</string>
@@ -135,6 +144,7 @@
     <string name="restart_scope_mi_bluetooth">小米蓝牙</string>
     <string name="restart_scope_smart_audio">智慧音频（空间音频同步）</string>
     <string name="restart_scope_my_devices">我的设备（ColorOS 耳机详情）</string>
+    <string name="restart_scope_quick_connect">快速设备连接（ColorOS 官方弹窗）</string>
     <string name="documentation_title">使用文档</string>
     <string name="documentation_load_failed">文档暂时无法加载</string>
     <string name="documentation_load_failed_summary">请检查网络后重试。站内内容会留在 App 中，外部链接仍由系统浏览器打开。</string>

@@ -120,6 +120,7 @@ internal fun MainTabsScaffold(
     fakeDeviceId: MutableState<String>,
     onFakeDeviceIdChange: (String) -> Unit,
     onOpenTheme: () -> Unit,
+    onOpenColorOsLiveAlertSettings: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenDocumentation: () -> Unit,
     onOpenSponsor: () -> Unit,
@@ -290,6 +291,7 @@ internal fun MainTabsScaffold(
                         fakeDeviceId = fakeDeviceId,
                         onFakeDeviceIdChange = onFakeDeviceIdChange,
                         onOpenTheme = onOpenTheme,
+                        onOpenColorOsLiveAlertSettings = onOpenColorOsLiveAlertSettings,
                         onOpenAbout = onOpenAbout,
                     )
                 }
@@ -495,6 +497,7 @@ private fun SettingsTabPage(
     fakeDeviceId: MutableState<String>,
     onFakeDeviceIdChange: (String) -> Unit,
     onOpenTheme: () -> Unit,
+    onOpenColorOsLiveAlertSettings: () -> Unit,
     onOpenAbout: () -> Unit,
 ) {
     val scrollBehavior = MiuixScrollBehavior(rememberTopAppBarState())
@@ -538,6 +541,7 @@ private fun SettingsTabPage(
             fakeDeviceId = fakeDeviceId,
             onFakeDeviceIdChange = onFakeDeviceIdChange,
             onOpenTheme = onOpenTheme,
+            onOpenColorOsLiveAlertSettings = onOpenColorOsLiveAlertSettings,
             onOpenAbout = onOpenAbout,
         )
     }
@@ -621,6 +625,7 @@ private fun restartScopeOptionsForCurrentRom(): List<RestartScope> =
         )
         RomFamily.COLOR_OS -> listOf(
             RestartScope("com.heytap.mydevices", R.string.restart_scope_my_devices),
+            RestartScope("com.heytap.accessory", R.string.restart_scope_quick_connect),
         )
         RomFamily.GENERIC_ANDROID -> emptyList()
     }

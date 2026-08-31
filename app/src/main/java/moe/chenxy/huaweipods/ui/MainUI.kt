@@ -111,7 +111,7 @@ sealed interface Screen : NavKey {
 }
 
 private const val DEVICE_CONNECT_TIMEOUT_MS = 15_000L
-private const val GITHUB_REPOSITORY_URL = "https://github.com/Nshpiter/HuaweiPods"
+private const val GITHUB_REPOSITORY_URL = "https://github.com/Artifical0/HuaweiPods-ColorOS"
 private const val GITHUB_ISSUES_URL = "$GITHUB_REPOSITORY_URL/issues"
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -748,6 +748,17 @@ fun MainUI(
         }
     }
 
+    fun openColorOsLiveAlertSettings() {
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(this) }
+                .onFailure {
+                    Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
+
     fun openDevicePicker() {
         showDevicePicker = true
         selectedTab = MainTab.Earphones
@@ -963,6 +974,7 @@ fun MainUI(
                     broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                 },
                 onOpenTheme = { backStack.add(Screen.Theme) },
+                onOpenColorOsLiveAlertSettings = { openColorOsLiveAlertSettings() },
                 onOpenAbout = { backStack.add(Screen.About) },
                 onOpenDocumentation = { backStack.add(Screen.Documentation) },
                 onOpenSponsor = { backStack.add(Screen.Sponsor) },

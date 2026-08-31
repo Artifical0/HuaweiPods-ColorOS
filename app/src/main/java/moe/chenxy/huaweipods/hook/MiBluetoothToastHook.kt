@@ -1,21 +1,27 @@
 package moe.chenxy.huaweipods.hook
 
 import android.annotation.SuppressLint
+import android.Manifest
 import android.app.Application
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.os.Bundle
+import android.os.PowerManager
 import com.xzakota.hyper.notification.focus.FocusNotification
 import moe.chenxy.huaweipods.utils.FocusIslandUtil
 import moe.chenxy.huaweipods.utils.ModuleResourceResolver
@@ -26,17 +32,43 @@ import moe.chenxy.huaweipods.utils.SystemApisUtils.notifyAsUser
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 import moe.chenxy.huaweipods.config.NotificationPresentationPolicy
+import moe.chenxy.huaweipods.config.PodImagePrefs
+import moe.chenxy.huaweipods.config.PodImageResource
+import moe.chenxy.huaweipods.config.preferredImagePath
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
 import moe.chenxy.huaweipods.pods.supportsAnc
+import moe.chenxy.huaweipods.platform.RomFamily
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.R
 import java.util.concurrent.ConcurrentHashMap
+import java.io.File
 
 internal fun shouldOfferNotificationAncAction(route: HuaweiDeviceRoute): Boolean = route.supportsAnc
+
+internal fun shouldAcceptPodsNotificationUpdate(
+    disconnectedSinceLastConnect: Boolean,
+    deviceConnected: Boolean?,
+): Boolean = !disconnectedSinceLastConnect && deviceConnected != false
+
+internal fun shouldAttemptColorOsAutoPopup(
+    isColorOsHost: Boolean,
+    alreadyShownForConnection: Boolean,
+    screenInteractive: Boolean,
+    keyguardLocked: Boolean,
+): Boolean = isColorOsHost &&
+    !alreadyShownForConnection &&
+    screenInteractive &&
+    !keyguardLocked
+
+internal fun shouldDelegateColorOsNotificationToApp(
+    isColorOsHost: Boolean,
+    appCanPostNotifications: Boolean,
+): Boolean = isColorOsHost && appCanPostNotifications
 
 @SuppressLint("MissingPermission")
 object MiBluetoothToastHook : HookContext() {
@@ -44,11 +76,18 @@ object MiBluetoothToastHook : HookContext() {
     // ANC 模式本地缓存，用于在 FreeBuds 3 已验证的关/开状态之间切换。
     private val receiverRegistrationLock = Any()
     private val activeNotificationAddresses = ConcurrentHashMap.newKeySet<String>()
+    private val disconnectedNotificationAddresses = ConcurrentHashMap.newKeySet<String>()
+    private val officialPopupShownAddresses = ConcurrentHashMap.newKeySet<String>()
     @Volatile
     private var receiverRegistered = false
+    @Volatile
+    private var colorOsPopupHostReady = false
 
     override fun onHook() {
         val isXiaomiHost = packageName == "com.xiaomi.bluetooth"
+        val isColorOsHost = !isXiaomiHost &&
+            RomIntegrationPolicy.detect(android.os.Build.MANUFACTURER, android.os.Build.BRAND) ==
+            RomFamily.COLOR_OS
 
         fun cancelNotificationForAddress(address: String, context: Context) {
             if (address.isBlank()) return
@@ -66,6 +105,10 @@ object MiBluetoothToastHook : HookContext() {
             activeNotificationAddresses.remove(address)
         }
 
+        fun clearConnectionPopupState(address: String) {
+            officialPopupShownAddresses.remove(address)
+        }
+
         fun cancelAllPodsNotifications(context: Context) {
             activeNotificationAddresses.toList().forEach { address ->
                 runCatching { cancelNotificationForAddress(address, context) }
@@ -75,7 +118,10 @@ object MiBluetoothToastHook : HookContext() {
             runCatching {
                 val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 manager.activeNotifications
-                    .filter { it.id == 10003 && it.tag?.startsWith("BTHeadset") == true }
+                    .filter {
+                        (it.id == 10003 && it.tag?.startsWith("BTHeadset") == true) ||
+                            (it.id == 10004 && it.tag?.startsWith("HuaweiPodsPopup") == true)
+                    }
                     .forEach {
                         if (isXiaomiHost) {
                             manager.cancelAsUser(it.tag, it.id, SystemApisUtils.getUserAllUserHandle())
@@ -87,6 +133,18 @@ object MiBluetoothToastHook : HookContext() {
                 Log.w("HuaweiPods", "Failed to scan disabled Pod Notifications", it)
             }
         }
+
+        fun deviceConnectionState(device: BluetoothDevice): Boolean? = runCatching {
+            val method = device.javaClass.methods.firstOrNull {
+                it.name == "isConnected" && it.parameterCount in 0..1
+            } ?: return@runCatching null
+            when (method.parameterCount) {
+                0 -> method.invoke(device) as? Boolean
+                else -> method.invoke(device, BluetoothDevice.TRANSPORT_AUTO) as? Boolean
+            }
+        }.onFailure {
+            Log.w("HuaweiPods", "Unable to verify notification device connection", it)
+        }.getOrNull()
 
         fun deleteIntent(context: Context, bluetoothDevice: BluetoothDevice): PendingIntent? {
             val intent = Intent("com.android.bluetooth.headset.notification.cancle")
@@ -150,6 +208,19 @@ object MiBluetoothToastHook : HookContext() {
                     cancelNotificationForAddress(address, context)
                     Log.w("HuaweiPods", "skip notification: stale Hook build")
                     FocusIslandUtil.cancelBatteryIsland(context)
+                    return
+                }
+                val appCanPostNotifications = context.packageManager.checkPermission(
+                    Manifest.permission.POST_NOTIFICATIONS,
+                    BuildConfig.APPLICATION_ID,
+                ) == PackageManager.PERMISSION_GRANTED
+                if (shouldDelegateColorOsNotificationToApp(
+                        isColorOsHost = isColorOsHost,
+                        appCanPostNotifications = appCanPostNotifications,
+                    )
+                ) {
+                    cancelNotificationForAddress(address, context)
+                    Log.d("HuaweiPods", "ColorOS persistent notification delegated to Live Alert")
                     return
                 }
                 val deviceRoute = DeviceRoutePrefs.resolve(prefs, address, deviceName)
@@ -244,7 +315,12 @@ object MiBluetoothToastHook : HookContext() {
                 } else {
                     null
                 }
-                val headsetBitmap = PodImageLoader.loadBoxBitmap(context, prefs, address)
+                val headsetBitmap = PodImageLoader.loadBoxBitmap(
+                    context = context,
+                    prefs = prefs,
+                    address = address,
+                    verifiedRoute = deviceRoute,
+                )
                     ?: BitmapFactory.decodeResource(moduleContext.resources, R.drawable.img_box)
                 if (headsetBitmap == null) {
                     Log.e("HuaweiPods", "createPodsNotification: headset bitmap null")
@@ -420,6 +496,90 @@ object MiBluetoothToastHook : HookContext() {
             Log.i("HuaweiPods", "ColorOS connection heads-up posted")
         }
 
+        fun showColorOsConnectionPopup(
+            address: String,
+            context: Context,
+            batteryParams: BatteryParams,
+        ) {
+            if (address.isBlank() || !isColorOsHost || address in officialPopupShownAddresses) return
+            val bluetoothDevice = runCatching {
+                BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(address)
+            }.getOrNull() ?: return
+            val screenInteractive =
+                (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive == true
+            val keyguardLocked =
+                (context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)?.isKeyguardLocked == true
+            if (!colorOsPopupHostReady) {
+                context.sendBroadcast(
+                    Intent(HuaweiPodsAction.ACTION_COLOROS_POPUP_HOST_PROBE).apply {
+                        setPackage("com.heytap.accessory")
+                        addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                    },
+                )
+                createPodsHeadsUpNotification(address, context, batteryParams)
+                officialPopupShownAddresses.add(address)
+                Log.i("HuaweiPods", "ColorOS popup host not scoped; used heads-up fallback")
+                return
+            }
+            if (!shouldAttemptColorOsAutoPopup(
+                    isColorOsHost = isColorOsHost,
+                    alreadyShownForConnection = false,
+                    screenInteractive = screenInteractive,
+                    keyguardLocked = keyguardLocked,
+                )
+            ) {
+                createPodsHeadsUpNotification(address, context, batteryParams)
+                officialPopupShownAddresses.add(address)
+                return
+            }
+
+            val moduleContext = ModuleResourceResolver.createModuleContext(context)
+            val deviceName = runCatching {
+                bluetoothDevice.alias?.takeIf(String::isNotBlank)
+                    ?: bluetoothDevice.name?.takeIf(String::isNotBlank)
+            }.getOrNull() ?: "Huawei FreeClip"
+            val deviceRoute = DeviceRoutePrefs.resolve(prefs, address, deviceName)
+            val isFreeClip = deviceName.contains("FreeClip", ignoreCase = true) ||
+                deviceRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP ||
+                deviceRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP2
+            if (!isFreeClip) {
+                createPodsHeadsUpNotification(address, context, batteryParams)
+                officialPopupShownAddresses.add(address)
+                return
+            }
+            val batteryText = buildList {
+                batteryParams.left?.takeIf { it.isConnected }?.let {
+                    add("L ${it.battery}%${if (it.isCharging) "⚡" else ""}")
+                }
+                batteryParams.right?.takeIf { it.isConnected }?.let {
+                    add("R ${it.battery}%${if (it.isCharging) "⚡" else ""}")
+                }
+                batteryParams.case?.takeIf { it.isConnected }?.let {
+                    val label = moduleContext?.getString(R.string.pod_case) ?: "Case"
+                    add("$label ${it.battery}%${if (it.isCharging) "⚡" else ""}")
+                }
+            }.joinToString("  ")
+            val imageFileName = runCatching {
+                PodImagePrefs.find(prefs, address)
+                    ?.preferredImagePath(PodImageResource.BOX)
+                    ?.let(::File)
+                    ?.name
+            }.getOrNull()
+
+            if (ColorOsAccessoryPopupBridge.showConnected(
+                    context = context,
+                    deviceName = deviceName,
+                    batteryText = batteryText,
+                    imageFileName = imageFileName,
+                )
+            ) {
+                Log.i("HuaweiPods", "ColorOS official accessory popup requested")
+            } else {
+                createPodsHeadsUpNotification(address, context, batteryParams)
+            }
+            officialPopupShownAddresses.add(address)
+        }
+
         fun cancelNotification(bluetoothDevice: BluetoothDevice, context: Context) {
             try {
                 val address = bluetoothDevice.address
@@ -490,7 +650,7 @@ object MiBluetoothToastHook : HookContext() {
                                     if (isXiaomiHost) {
                                         FocusIslandUtil.showBatteryIsland(context, prefs, batteryParams, address)
                                     } else {
-                                        createPodsHeadsUpNotification(address, context, batteryParams)
+                                        showColorOsConnectionPopup(address, context, batteryParams)
                                     }
                                 }
                                 HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION -> {
@@ -499,11 +659,87 @@ object MiBluetoothToastHook : HookContext() {
                                         BatteryParams::class.java,
                                     ) ?: return@runCatching
                                     val device = intent.getParcelableExtra("device", BluetoothDevice::class.java)
+                                        ?: return@runCatching
+                                    val address = device.address
+                                    if (!shouldAcceptPodsNotificationUpdate(
+                                            disconnectedSinceLastConnect =
+                                                address in disconnectedNotificationAddresses,
+                                            deviceConnected = deviceConnectionState(device),
+                                        )
+                                    ) {
+                                        cancelNotificationForAddress(address, context)
+                                        Log.i(
+                                            "HuaweiPods",
+                                            "Dropped stale battery notification after disconnect",
+                                        )
+                                        return@runCatching
+                                    }
                                     createPodsNotification(device, context, batteryParams)
+                                    if (isColorOsHost) {
+                                        // ColorOS does not consistently emit the separate strong-toast request.
+                                        // The first verified battery update is the reliable connected-device event.
+                                        showColorOsConnectionPopup(address, context, batteryParams)
+                                    }
                                 }
                                 HuaweiPodsAction.ACTION_CANCEL_PODS_NOTIFICATION -> {
                                     intent.getParcelableExtra("device", BluetoothDevice::class.java)
-                                        ?.let { cancelNotification(it, context) }
+                                        ?.let {
+                                            disconnectedNotificationAddresses.add(it.address)
+                                            cancelNotification(it, context)
+                                        }
+                                }
+                                else -> when (intent.action) {
+                                    BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                                        intent.getParcelableExtra(
+                                            BluetoothDevice.EXTRA_DEVICE,
+                                            BluetoothDevice::class.java,
+                                        )?.let {
+                                            disconnectedNotificationAddresses.remove(it.address)
+                                            clearConnectionPopupState(it.address)
+                                        }
+                                    }
+                                    BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                                        intent.getParcelableExtra(
+                                            BluetoothDevice.EXTRA_DEVICE,
+                                            BluetoothDevice::class.java,
+                                        )?.let {
+                                            disconnectedNotificationAddresses.add(it.address)
+                                            clearConnectionPopupState(it.address)
+                                            cancelNotification(it, context)
+                                            Log.i(
+                                                "HuaweiPods",
+                                                "ColorOS notification cleared on ACL disconnect",
+                                            )
+                                        }
+                                    }
+                                    BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED -> {
+                                        val device = intent.getParcelableExtra(
+                                            BluetoothDevice.EXTRA_DEVICE,
+                                            BluetoothDevice::class.java,
+                                        ) ?: return@runCatching
+                                        when (intent.getIntExtra(
+                                            BluetoothProfile.EXTRA_STATE,
+                                            BluetoothProfile.STATE_DISCONNECTED,
+                                        )) {
+                                            BluetoothProfile.STATE_CONNECTED ->
+                                                disconnectedNotificationAddresses.remove(device.address)
+                                            BluetoothProfile.STATE_DISCONNECTED -> {
+                                                disconnectedNotificationAddresses.add(device.address)
+                                                clearConnectionPopupState(device.address)
+                                                cancelNotification(device, context)
+                                            }
+                                        }
+                                    }
+                                    BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                                        if (intent.getIntExtra(
+                                                BluetoothAdapter.EXTRA_STATE,
+                                                BluetoothAdapter.ERROR,
+                                            ) == BluetoothAdapter.STATE_OFF
+                                        ) {
+                                            officialPopupShownAddresses.clear()
+                                            cancelAllPodsNotifications(context)
+                                        }
+                                    }
                                 }
                             }
                         }.onFailure {
@@ -518,11 +754,43 @@ object MiBluetoothToastHook : HookContext() {
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_SEND_STRONG_TOAST)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_CANCEL_PODS_NOTIFICATION)
+                    addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+                    addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+                    addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+                    addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
                 }
                 runCatching {
                     context.registerReceiver(broadcastReceiver, intentFilter, Context.RECEIVER_EXPORTED)
                 }.onSuccess {
                     receiverRegistered = true
+                    if (isColorOsHost) {
+                        val hostReadyReceiver = object : BroadcastReceiver() {
+                            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                                if (intent?.action == HuaweiPodsAction.ACTION_COLOROS_POPUP_HOST_READY) {
+                                    colorOsPopupHostReady = true
+                                    Log.i("HuaweiPods", "ColorOS official popup host ready")
+                                }
+                            }
+                        }
+                        runCatching {
+                            context.registerReceiver(
+                                hostReadyReceiver,
+                                IntentFilter(HuaweiPodsAction.ACTION_COLOROS_POPUP_HOST_READY),
+                                "android.permission.BLUETOOTH_PRIVILEGED",
+                                null,
+                                Context.RECEIVER_EXPORTED,
+                            )
+                        }.onSuccess {
+                            context.sendBroadcast(
+                                Intent(HuaweiPodsAction.ACTION_COLOROS_POPUP_HOST_PROBE).apply {
+                                    setPackage("com.heytap.accessory")
+                                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                                },
+                            )
+                        }.onFailure {
+                            Log.w("HuaweiPods", "ColorOS popup host receiver unavailable", it)
+                        }
+                    }
                 }.onFailure {
                     Log.e("HuaweiPods", "Failed to register Bluetooth notification receiver", it)
                 }

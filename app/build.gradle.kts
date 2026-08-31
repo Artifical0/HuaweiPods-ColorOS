@@ -13,13 +13,14 @@ android {
     namespace = "moe.chenxy.huaweipods"
     compileSdk = 37
     compileSdkMinor = 0
+    buildToolsVersion = "37.0.0"
 
     defaultConfig {
-        applicationId = "moe.chenxy.huaweipods"
+        applicationId = "moe.chenxy.huaweipods.coloros"
         minSdk = 35
         targetSdk = 36
         versionCode = 13
-        versionName = "1.6.0"
+        versionName = "1.6.0-coloros.1"
         buildConfigField("long", "BUILD_TIMESTAMP", moduleBuildTimestamp.toString())
     }
 
@@ -74,12 +75,12 @@ android {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(JavaVersion.VERSION_23.majorVersion)
+        languageVersion = JavaLanguageVersion.of(JavaVersion.VERSION_21.majorVersion)
     }
 }
 
 kotlin {
-    jvmToolchain(JavaVersion.VERSION_23.majorVersion.toInt())
+    jvmToolchain(JavaVersion.VERSION_21.majorVersion.toInt())
 }
 
 configurations.configureEach {

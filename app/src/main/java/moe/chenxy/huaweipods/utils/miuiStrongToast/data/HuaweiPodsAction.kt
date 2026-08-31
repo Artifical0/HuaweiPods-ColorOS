@@ -3,7 +3,7 @@ package moe.chenxy.huaweipods.utils.miuiStrongToast.data
 import android.content.IntentFilter
 
 object HuaweiPodsAction {
-    private const val PREFIX = "chen.action.huaweipods"
+    private const val PREFIX = "chen.action.huaweipods.coloros"
 
     const val EXTRA_DEVICE_ROUTE = "device_route"
     const val EXTRA_FREECLIP2_AUDIO_KIND = "freeclip2_audio_kind"
@@ -30,6 +30,7 @@ object HuaweiPodsAction {
     const val EXTRA_FREECLIP2_BRIDGE_EQ_PRESET_ID = "freeclip2_bridge_eq_preset_id"
     const val EXTRA_MODULE_BUILD_ID = "module_build_id"
     const val EXTRA_RESTORE_NOTIFICATION = "restore_notification"
+    const val EXTRA_EVENT_ELAPSED_REALTIME = "event_elapsed_realtime"
     const val EXTRA_ROUTE_PROBE_ADDRESS = "route_probe_address"
     const val EXTRA_ROUTE_PROBE_GENERATION = "route_probe_generation"
     const val EXTRA_ROUTE_PROBE_NONCE = "route_probe_nonce"
@@ -90,6 +91,8 @@ object HuaweiPodsAction {
         PREFIX + ".smart_audio_image_provider_ready"
     const val ACTION_POD_IMAGES_CHANGED = PREFIX + ".pod_images_changed"
     const val ACTION_CONFIG_CHANGED = PREFIX + ".config_changed"
+    const val ACTION_COLOROS_POPUP_HOST_PROBE = PREFIX + ".coloros_popup_host_probe"
+    const val ACTION_COLOROS_POPUP_HOST_READY = PREFIX + ".coloros_popup_host_ready"
 
     fun canonical(action: String?): String? = action
 

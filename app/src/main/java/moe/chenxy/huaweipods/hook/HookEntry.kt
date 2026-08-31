@@ -32,6 +32,8 @@ open class HookEntry : XposedModule() {
             }
             "com.heytap.mydevices" ->
                 loadHook(ColorOsMyDevicesHook, param.defaultClassLoader, param.packageName)
+            "com.heytap.accessory" ->
+                loadHook(ColorOsAccessoryFrameworkHook, param.defaultClassLoader, param.packageName)
         }
     }
 

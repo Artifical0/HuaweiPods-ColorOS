@@ -22,7 +22,7 @@ class DocumentationUrlPolicyTest {
     @Test
     fun `other trusted web destinations open externally`() {
         listOf(
-            "https://github.com/Nshpiter/HuaweiPods",
+            "https://github.com/Artifical0/HuaweiPods-ColorOS",
             "https://smarthome-drcn.dbankcdn.cn/device/guide/AAM001/000027/000027.json",
         ).forEach { url ->
             assertEquals(

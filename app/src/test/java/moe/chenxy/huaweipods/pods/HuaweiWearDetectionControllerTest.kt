@@ -16,6 +16,7 @@ class HuaweiWearDetectionControllerTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+            HuaweiDeviceRoute.HUAWEI_FREECLIP,
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
         )
         supported.forEach { route ->

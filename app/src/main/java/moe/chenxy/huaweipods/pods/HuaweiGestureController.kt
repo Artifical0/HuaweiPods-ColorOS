@@ -299,6 +299,8 @@ object HuaweiGestureController {
         } else if (route == HuaweiDeviceRoute.HUAWEI_FREEARC) {
             freeClip2DoubleTapQuery + freeClip2TripleTapQuery +
                 freeBuds4eLongPressQuery + freeClip2SwipeQuery
+        } else if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP) {
+            freeClip2DoubleTapQuery + freeClip2TripleTapQuery
         } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
             route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I
@@ -594,6 +596,8 @@ enum class HuaweiTapAction(val extraValue: String) {
             kind: HuaweiGestureKind,
         ): List<HuaweiTapAction> = when (route to kind) {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to HuaweiGestureKind.DOUBLE_TAP -> freeBuds3DoubleTapActions
+            HuaweiDeviceRoute.HUAWEI_FREECLIP to HuaweiGestureKind.DOUBLE_TAP -> freeBuds7iDoubleTapActions
+            HuaweiDeviceRoute.HUAWEI_FREECLIP to HuaweiGestureKind.TRIPLE_TAP -> freeBuds7iTripleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to HuaweiGestureKind.DOUBLE_TAP -> freeBuds4eDoubleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to HuaweiGestureKind.DOUBLE_TAP -> freeBuds7iDoubleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to HuaweiGestureKind.DOUBLE_TAP -> freeBuds6iDoubleTapActions
@@ -649,6 +653,7 @@ enum class HuaweiTapAction(val extraValue: String) {
                 NOISE_CANCELLATION -> null
             }
 
+            HuaweiDeviceRoute.HUAWEI_FREECLIP,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,

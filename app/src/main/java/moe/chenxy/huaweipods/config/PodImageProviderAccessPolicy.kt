@@ -1,13 +1,14 @@
 package moe.chenxy.huaweipods.config
 
 internal object PodImageProviderAccessPolicy {
-    private const val MODULE_PACKAGE = "moe.chenxy.huaweipods"
+    private const val MODULE_PACKAGE = "moe.chenxy.huaweipods.coloros"
 
     private val imageConsumerPackages = setOf(
         "com.android.bluetooth",
         "com.android.settings",
         "com.milink.service",
         "com.xiaomi.bluetooth",
+        "com.heytap.accessory",
     )
 
     fun mayOpenImage(callingPackage: String?): Boolean =

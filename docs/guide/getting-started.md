@@ -20,7 +20,7 @@ HuaweiPods 需要正常工作的 LSPosed 环境，并会修改系统蓝牙相关
 
 ## 1. 安装 HuaweiPods
 
-从 [GitHub Releases](https://github.com/Nshpiter/HuaweiPods/releases) 下载正式 APK，正常安装后打开 HuaweiPods。1.2.0 及以上版本无需寻找机型专用包。首次安装会显示简短引导，用于检查 LSPosed 服务和两个核心蓝牙作用域；缺少项目时仍可继续，之后再到 LSPosed 补齐。
+从 [GitHub Releases](https://github.com/Artifical0/HuaweiPods-ColorOS/releases) 下载正式 APK，正常安装后打开 HuaweiPods ColorOS。首次安装会显示简短引导，用于检查 LSPosed 服务和核心蓝牙作用域；缺少项目时仍可继续，之后再到 LSPosed 补齐。
 
 ## 2. 启用 LSPosed 作用域
 
@@ -64,7 +64,7 @@ FreeClip、FreeClip 2 和两代 Eyewear 不提供传统主动降噪，看不到�
 5. 在设备选择页确认当前蓝牙地址绑定的是实际型号；
 6. 对照[支持状态](../support/index.md)，确认该入口确实属于当前机型。
 
-仍无法复现时，可以到 [GitHub Issues](https://github.com/Nshpiter/HuaweiPods/issues) 提交耳机型号、手机型号、HyperOS 版本、LSPosed 版本、HuaweiPods 版本和复现步骤，也可以加入 QQ 群 `1022359908` 参与复测。
+仍无法复现时，可以到 [GitHub Issues](https://github.com/Artifical0/HuaweiPods-ColorOS/issues) 提交耳机型号、手机型号、系统版本、LSPosed 版本、HuaweiPods ColorOS 版本和复现步骤，也可以加入 QQ 群 `1022359908` 参与复测。
 
 ## 更新或卸载
 

@@ -59,11 +59,11 @@ class ReleaseNotesMarkdownParserTest {
     @Test
     fun `keeps safe links clickable and rejects unsafe schemes`() {
         val spans = parseReleaseNotesInlineMarkdown(
-            "查看 [Release](https://github.com/Nshpiter/HuaweiPods) 或 [危险链接](javascript:alert(1))",
+            "查看 [Release](https://github.com/Artifical0/HuaweiPods-ColorOS) 或 [危险链接](javascript:alert(1))",
         )
 
         val release = spans.first { it.text == "Release" }
-        assertEquals("https://github.com/Nshpiter/HuaweiPods", release.url)
+        assertEquals("https://github.com/Artifical0/HuaweiPods-ColorOS", release.url)
         assertTrue(spans.joinToString("") { it.text }.contains("危险链接"))
         assertTrue(spans.filter { it.text.contains("危险链接") }.all { it.url == null })
         assertFalse(spans.any { it.url?.startsWith("javascript:") == true })

@@ -9,7 +9,7 @@ class PendingUpdateStoreTest {
         tag = "10-1.4.3",
         versionCode = 10L,
         versionName = "1.4.3",
-        releaseUrl = "https://github.com/Nshpiter/HuaweiPods/releases/tag/10-1.4.3",
+        releaseUrl = "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/10-1.4.3",
         changelog = "Update notes",
     )
 

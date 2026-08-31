@@ -1,7 +1,13 @@
 <resources>
-    <string name="app_name">HuaweiPods</string>
-    <string name="app_description">Huawei earphone support for HyperOS and ColorOS</string>
-    <string name="app_subtitle">Huawei earphones for HyperOS and ColorOS</string>
+    <string name="app_name">HuaweiPods ColorOS</string>
+    <string name="app_description">Independent ColorOS adaptation for Huawei earphones</string>
+    <string name="app_subtitle">Independent Huawei earphone adaptation for ColorOS</string>
+    <string name="coloros_live_alert_channel">Earphones live alert</string>
+    <string name="coloros_live_alert_fallback_title">HUAWEI FreeClip</string>
+    <string name="coloros_live_alert_settings">ColorOS Fluid Cloud</string>
+    <string name="coloros_live_alert_settings_summary">Open system notification settings and enable Live alerts</string>
+    <string name="coloros_background_settings">ColorOS auto-launch</string>
+    <string name="coloros_background_settings_summary">Allow auto-launch and background activity so popups and Fluid Cloud can wake reliably</string>
     <string name="pod_info">Pod Info</string>
     <string name="about">About HuaweiPods</string>
     <string name="settings">Settings</string>
@@ -116,6 +122,9 @@
     <string name="lockscreen_notification_summary">Allow an enabled persistent headset notification to appear on the lock screen and AOD</string>
     <string name="persistent_notification">Persistent headset notification</string>
     <string name="persistent_notification_summary">Show headset connection status and battery in the notification shade</string>
+    <string name="freeclip_adaptive_channels">Adaptive left/right earbuds</string>
+    <string name="freeclip_adaptive_channels_summary">Detect the wearing direction and correct the left/right channels automatically</string>
+    <string name="freeclip_drop_reminder_summary">On ColorOS the earbuds play the drop alert; phone notifications and voice announcements require a Huawei phone</string>
     <string name="island_mode_none">none</string>
     <string name="island_mode_official">System native (limited models)</string>
     <string name="island_mode_module">Module (recommended)</string>
@@ -134,6 +143,7 @@
     <string name="restart_scope_mi_bluetooth">Mi Bluetooth</string>
     <string name="restart_scope_smart_audio">Smart Audio (spatial sync)</string>
     <string name="restart_scope_my_devices">My Devices (ColorOS headset detail)</string>
+    <string name="restart_scope_quick_connect">Quick Device Connect (ColorOS popup)</string>
     <string name="documentation_title">Documentation</string>
     <string name="documentation_load_failed">Documentation is unavailable</string>
     <string name="documentation_load_failed_summary">Check your connection and retry. Site pages stay in the app, while external links open in your browser.</string>

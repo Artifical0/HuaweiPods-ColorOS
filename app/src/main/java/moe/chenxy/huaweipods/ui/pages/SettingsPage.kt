@@ -9,10 +9,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import android.os.Build
 import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.config.ConfigManager
+import moe.chenxy.huaweipods.platform.RomFamily
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
+import moe.chenxy.huaweipods.platform.openColorOsBackgroundSettings
 import moe.chenxy.huaweipods.ui.AppLocale
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
@@ -46,8 +51,10 @@ fun SettingsPage(
     fakeDeviceId: MutableState<String> = mutableStateOf(ConfigManager.DEFAULT_FAKE_DEVICE_ID),
     onFakeDeviceIdChange: (String) -> Unit = {},
     onOpenTheme: () -> Unit = {},
+    onOpenColorOsLiveAlertSettings: () -> Unit = {},
     onOpenAbout: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val languageOptions = listOf(
         stringResource(R.string.language_system),
         stringResource(R.string.language_chinese),
@@ -160,6 +167,22 @@ fun SettingsPage(
                     checked = lockscreenNotificationEnabled.value,
                     onCheckedChange = onLockscreenNotificationEnabledChange,
                 )
+                if (
+                    Build.VERSION.SDK_INT >= 36 &&
+                    RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND) ==
+                    RomFamily.COLOR_OS
+                ) {
+                    BasicComponent(
+                        title = stringResource(R.string.coloros_live_alert_settings),
+                        summary = stringResource(R.string.coloros_live_alert_settings_summary),
+                        onClick = onOpenColorOsLiveAlertSettings,
+                    )
+                    BasicComponent(
+                        title = stringResource(R.string.coloros_background_settings),
+                        summary = stringResource(R.string.coloros_background_settings_summary),
+                        onClick = { openColorOsBackgroundSettings(context) },
+                    )
+                }
                 SwitchPreference(
                     title = stringResource(R.string.milink_low_latency_card),
                     summary = stringResource(R.string.milink_low_latency_card_summary),

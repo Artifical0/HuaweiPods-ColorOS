@@ -189,7 +189,9 @@ object HuaweiHfpController {
                     if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
                         requestFreeClip2AudioState()
                     }
-                    if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+                    if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
+                        sessionRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP
+                    ) {
                         requestHuaweiEqualizerState()
                     }
                     if (sessionRoute.supportsLowLatencyControl) {
@@ -302,7 +304,9 @@ object HuaweiHfpController {
         if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
             requestFreeClip2AudioState(force = true)
         }
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
+            route == HuaweiDeviceRoute.HUAWEI_FREECLIP
+        ) {
             requestHuaweiEqualizerState(force = true)
         }
     }
@@ -1694,7 +1698,9 @@ object HuaweiHfpController {
         val currentContext = context ?: return
         val currentDevice = device ?: return
         val requestedRoute = sessionRoute
-        if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) return
+        if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6I &&
+            requestedRoute != HuaweiDeviceRoute.HUAWEI_FREECLIP
+        ) return
         val presetId = intent.getIntExtra(
             HuaweiPodsAction.EXTRA_HUAWEI_EQUALIZER_SELECTED_ID,
             -1,
@@ -1736,7 +1742,9 @@ object HuaweiHfpController {
         val currentContext = context ?: return
         val currentDevice = device ?: return
         val requestedRoute = sessionRoute
-        if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) return
+        if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6I &&
+            requestedRoute != HuaweiDeviceRoute.HUAWEI_FREECLIP
+        ) return
         if (equalizerStateRequestInFlight) return
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastEqualizerStateRequestAt < EQUALIZER_REFRESH_MIN_INTERVAL_MS) return
@@ -2119,6 +2127,7 @@ object HuaweiHfpController {
         val currentDevice = device
         Intent(action).apply {
             putExtra("vendor", "huawei")
+            putExtra(HuaweiPodsAction.EXTRA_EVENT_ELAPSED_REALTIME, SystemClock.elapsedRealtime())
             encodeHuaweiDeviceRouteForBroadcast(sessionRoute)?.let {
                 putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)
             }
@@ -2129,14 +2138,19 @@ object HuaweiHfpController {
             fill()
             setPackage(BuildConfig.APPLICATION_ID)
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            ctx.sendBroadcast(this)
+            ctx.sendIdentitySharingBroadcast(this)
         }
     }
 
     private fun sendExternalBroadcast(action: String, fill: Intent.() -> Unit = {}) {
         val ctx = context ?: return
         val currentDevice = device
-        listOf("com.milink.service", "com.xiaomi.bluetooth", "com.android.settings").forEach { targetPackage ->
+        listOf(
+            "com.milink.service",
+            "com.xiaomi.bluetooth",
+            "com.android.settings",
+            "com.heytap.mydevices",
+        ).forEach { targetPackage ->
             Intent(action).apply {
                 putExtra("vendor", "huawei")
                 encodeHuaweiDeviceRouteForBroadcast(sessionRoute)?.let {

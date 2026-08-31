@@ -904,7 +904,8 @@ internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGesture
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
         hasWearDetection = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
-            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
+            route == HuaweiDeviceRoute.HUAWEI_FREECLIP,
     )
 }
 

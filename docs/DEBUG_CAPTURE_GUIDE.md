@@ -62,7 +62,7 @@ QQ群 `1022359908` 用于待适配型号登记、测试招募、操作答疑和�
 
 ## 提交与反馈
 
-1. 先搜索 [HuaweiPods Issues](https://github.com/Nshpiter/HuaweiPods/issues) 是否已有同型号记录。
+1. 先搜索 [HuaweiPods ColorOS Issues](https://github.com/Artifical0/HuaweiPods-ColorOS/issues) 是否已有同型号记录。
 2. 已有 Issue 时，在采集向导填写编号并回到原 Issue 跟进；没有时可留空，导出、检查后再新建 Issue。
 3. Issue 中请提供耳机在系统蓝牙里显示的名称、手机型号、系统版本、智慧音频版本、`protocol_event_count`、每项操作的实际表现，以及必要的脱敏采集包。
 4. 普通采集 ZIP 只有在解压检查并确认可公开后，才可附到 GitHub Issue；拿不准时先只提交环境信息，等待维护者安排私下传输。

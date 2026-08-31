@@ -1943,13 +1943,19 @@ object SettingsHeadsetHook : HookContext() {
             ?.let { return it.bitmap }
         return runCatching {
             if (address != null) {
-                PodImageLoader.loadBoxBitmap(context, prefs, address)
+                PodImageLoader.loadBoxBitmap(
+                    context = context,
+                    prefs = prefs,
+                    address = address,
+                    verifiedRoute = route,
+                )
             } else {
                 val moduleContext = context.createPackageContext(BuildConfig.APPLICATION_ID, Context.CONTEXT_IGNORE_SECURITY)
                 if (!ModuleResourceResolver.isCurrentModuleBuild(moduleContext)) return null
                 val resourceId = when (route) {
                     HuaweiDeviceRoute.HUAWEI_FREEBUDS5 -> R.drawable.img_freebuds5_box
                     HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> R.drawable.img_freebuds6i_settings
+                    HuaweiDeviceRoute.HUAWEI_FREECLIP -> R.drawable.img_freeclip_box
                     HuaweiDeviceRoute.HUAWEI_FREECLIP2 -> R.drawable.img_freeclip2_box
                     HuaweiDeviceRoute.HUAWEI_EYEWEAR2 -> R.drawable.img_eyewear2_box
                     else -> R.drawable.img_box

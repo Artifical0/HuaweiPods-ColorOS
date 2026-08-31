@@ -36,15 +36,15 @@ internal data class ReleaseTag(
 
 object GitHubReleaseChecker {
     const val LATEST_RELEASE_API =
-        "https://api.github.com/repos/Nshpiter/HuaweiPods/releases/latest"
+        "https://api.github.com/repos/Artifical0/HuaweiPods-ColorOS/releases/latest"
     const val LATEST_RELEASE_PAGE =
-        "https://github.com/Nshpiter/HuaweiPods/releases/latest"
+        "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/latest"
 
     private const val CONNECT_TIMEOUT_MS = 10_000
     private const val READ_TIMEOUT_MS = 10_000
     private const val MAX_RESPONSE_CHARS = 1_048_576
     internal const val MAX_CHANGELOG_CHARS = 32_768
-    private const val RELEASE_PATH_PREFIX = "/Nshpiter/HuaweiPods/releases/"
+    private const val RELEASE_PATH_PREFIX = "/Artifical0/HuaweiPods-ColorOS/releases/"
     private const val RELEASE_TAG_PATH_PREFIX = "${RELEASE_PATH_PREFIX}tag/"
 
     private val json = Json { ignoreUnknownKeys = true }

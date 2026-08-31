@@ -47,7 +47,7 @@ class GitHubReleaseCheckerTest {
             """
             {
               "tag_name": "4-1.2.0",
-              "html_url": "https://github.com/Nshpiter/HuaweiPods/releases/tag/4-1.2.0",
+              "html_url": "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/4-1.2.0",
               "body": "Battery fixes and model integration",
               "ignored": true
             }
@@ -60,7 +60,7 @@ class GitHubReleaseCheckerTest {
                 tag = "4-1.2.0",
                 versionCode = 4L,
                 versionName = "1.2.0",
-                releaseUrl = "https://github.com/Nshpiter/HuaweiPods/releases/tag/4-1.2.0",
+                releaseUrl = "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/4-1.2.0",
                 changelog = "Battery fixes and model integration",
             ),
             result.getOrNull(),
@@ -71,17 +71,17 @@ class GitHubReleaseCheckerTest {
     fun `accepts only HTTPS release pages from the HuaweiPods GitHub repository`() {
         assertTrue(
             GitHubReleaseChecker.isTrustedReleaseUrl(
-                "https://github.com/Nshpiter/HuaweiPods/releases/tag/4-1.2.0",
+                "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/4-1.2.0",
             ),
         )
 
         listOf(
-            "http://github.com/Nshpiter/HuaweiPods/releases/tag/4-1.2.0",
-            "https://github.com.evil.example/Nshpiter/HuaweiPods/releases/tag/4-1.2.0",
+            "http://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/4-1.2.0",
+            "https://github.com.evil.example/Artifical0/HuaweiPods-ColorOS/releases/tag/4-1.2.0",
             "https://github.com/other/HuaweiPods/releases/tag/4-1.2.0",
-            "https://github.com/Nshpiter/HuaweiPods/issues",
-            "https://user@github.com/Nshpiter/HuaweiPods/releases/tag/4-1.2.0",
-            "https://github.com:444/Nshpiter/HuaweiPods/releases/tag/4-1.2.0",
+            "https://github.com/Artifical0/HuaweiPods-ColorOS/issues",
+            "https://user@github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/4-1.2.0",
+            "https://github.com:444/Artifical0/HuaweiPods-ColorOS/releases/tag/4-1.2.0",
         ).forEach { url ->
             assertFalse(url, GitHubReleaseChecker.isTrustedReleaseUrl(url))
         }
@@ -90,7 +90,7 @@ class GitHubReleaseCheckerTest {
     @Test
     fun `parses trusted latest release redirect without release notes`() {
         val result = GitHubReleaseChecker.parseLatestReleaseRedirect(
-            "https://github.com/Nshpiter/HuaweiPods/releases/tag/6-1.3.1",
+            "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/6-1.3.1",
         )
 
         assertEquals(
@@ -98,7 +98,7 @@ class GitHubReleaseCheckerTest {
                 tag = "6-1.3.1",
                 versionCode = 6L,
                 versionName = "1.3.1",
-                releaseUrl = "https://github.com/Nshpiter/HuaweiPods/releases/tag/6-1.3.1",
+                releaseUrl = "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/6-1.3.1",
                 changelog = "",
             ),
             result.getOrNull(),
@@ -109,12 +109,12 @@ class GitHubReleaseCheckerTest {
     fun `rejects malformed or untrusted latest release redirects`() {
         listOf(
             "https://github.com/other/HuaweiPods/releases/tag/6-1.3.1",
-            "https://github.com/Nshpiter/HuaweiPods/releases/latest",
-            "https://github.com/Nshpiter/HuaweiPods/releases/tag/v1.3.1",
-            "https://github.com/Nshpiter/HuaweiPods/releases/tag/6-1.3.1/extra",
-            "https://github.com/Nshpiter/HuaweiPods/releases/tag/6-1.3.1?download=1",
-            "https://github.com/Nshpiter/HuaweiPods/releases/tag/6-1.3.1%20",
-            "https://github.com/Nshpiter/HuaweiPods/releases/tag/6-1.3.1%09",
+            "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/latest",
+            "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/v1.3.1",
+            "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/6-1.3.1/extra",
+            "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/6-1.3.1?download=1",
+            "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/6-1.3.1%20",
+            "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/6-1.3.1%09",
         ).forEach { location ->
             assertTrue(location, GitHubReleaseChecker.parseLatestReleaseRedirect(location).isFailure)
         }
@@ -142,7 +142,7 @@ class GitHubReleaseCheckerTest {
             """
             {
               "tag_name": "4-1.2.0",
-              "html_url": "https://github.com/Nshpiter/HuaweiPods/releases/tag/4-1.2.0",
+              "html_url": "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/tag/4-1.2.0",
               "body": "$longReleaseNotes"
             }
             """.trimIndent(),

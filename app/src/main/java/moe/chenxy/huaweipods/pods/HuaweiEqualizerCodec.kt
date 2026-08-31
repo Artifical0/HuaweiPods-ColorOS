@@ -95,6 +95,7 @@ object HuaweiEqualizerCodec {
         val allowedIds = when (route) {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> setOf(1, 2, 3)
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> setOf(0x01, 0x02, 0x03, 0x09)
+            HuaweiDeviceRoute.HUAWEI_FREECLIP -> setOf(0x01, 0x0A, 0x03, 0x09)
             HuaweiDeviceRoute.HUAWEI_FREEARC -> setOf(0x01, 0x0A, 0x02, 0x03, 0x09)
             else -> return null
         }
@@ -122,6 +123,7 @@ object HuaweiEqualizerCodec {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+        HuaweiDeviceRoute.HUAWEI_FREECLIP,
         HuaweiDeviceRoute.HUAWEI_FREECLIP2,
         HuaweiDeviceRoute.HUAWEI_FREEARC,
     )

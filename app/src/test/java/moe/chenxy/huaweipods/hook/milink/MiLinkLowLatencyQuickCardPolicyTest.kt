@@ -17,7 +17,7 @@ class MiLinkLowLatencyQuickCardPolicyTest {
         )
         assertFalse(
             MiLinkLowLatencyQuickCardPolicy.isAvailable(
-                HuaweiDeviceRoute.HUAWEI_FREECLIP,
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
                 configured = true,
             ),
         )

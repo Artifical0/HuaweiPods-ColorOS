@@ -286,7 +286,7 @@ fun DevicePickerPage(
         if (!bluetoothEnabled) {
             emptyList()
         } else {
-            adapter.bondedDevices
+            adapter.bondedDevices.orEmpty()
                 .filter {
                     DeviceRoutePrefs.find(routePrefs, it.address) != null ||
                         detectHuaweiDeviceRoute(it.name ?: it.alias).isSupported ||

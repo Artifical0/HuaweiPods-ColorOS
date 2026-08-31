@@ -119,7 +119,7 @@ fun AboutPage(
                 }
                 BasicComponent(
                     title = stringResource(R.string.github_repository),
-                    summary = "Nshpiter/HuaweiPods",
+                    summary = "Artifical0/HuaweiPods-ColorOS",
                     onClick = onOpenGitHub,
                 )
                 BasicComponent(
