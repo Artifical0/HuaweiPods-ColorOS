@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/user-attachments/assets/e8a3df6b-6e67-485a-ae1c-018ac24e87d4" width="120" height="120" style="border-radius: 24px;" alt="HuaweiPods Icon"/>
+<img src="docs/public/huaweipods-logo.png" width="120" height="120" style="border-radius: 24px;" alt="HuaweiPods Icon"/>
 
 # HuaweiPods ColorOS
 
@@ -16,7 +16,7 @@
 
 </div>
 
-HuaweiPods ColorOS is an Android 15+ Xposed module with the independent application ID `moe.chenxy.huaweipods.coloros`, so the original HuaweiPods LSPosed marketplace entry cannot replace it. HyperOS integration includes the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page. ColorOS integration includes the official Quick Device Connect popup, the My Devices headset-detail entry, and an Android 16 Live Alert / Fluid Cloud battery card.
+HuaweiPods ColorOS is an Android 15+ Xposed module with the independent application ID `io.github.artifical0.huaweipods.coloros`, so the original HuaweiPods LSPosed marketplace entry cannot replace it. HyperOS integration includes the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page. ColorOS integration includes the official Quick Device Connect popup, the My Devices headset-detail entry, and an Android 16 Live Alert / Fluid Cloud battery card.
 
 > The My Devices entry was verified against OnePlus PLK110 (ColorOS 16.1, `com.heytap.mydevices` 17.4.15). This is not yet a complete ColorOS system panel; private hosts change between system updates, so other builds may fall back to the module UI and standard Bluetooth detail page.
 
@@ -80,8 +80,6 @@ The unified build supports the 14 models below in one APK. Model-specific test A
 The release build no longer needs to install, run, or hook HUAWEI AI Life Audio for official images. Modern models provide the model and color identity over Bluetooth; legacy models can browse the verified Huawei color catalog in the image settings and ask the user to confirm once. Failures always fall back to cached or bundled images and never guess the default color.
 
 The Fusion Device Center low-latency card can be disabled in HuaweiPods settings. Because the verified protocol has no reliable readback for this setting, the UI shows the last successful write that will be reapplied after reconnection rather than a live device-reported state.
-
-For model-specific retesting and protocol capture, join QQ group `1022359908`.
 
 ## Development Notes
 

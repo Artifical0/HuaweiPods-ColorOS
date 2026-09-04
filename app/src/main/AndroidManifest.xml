@@ -53,7 +53,7 @@
             android:stopWithTask="false" />
 
         <meta-data
-            android:name="moe.chenxy.huaweipods.coloros.MODULE_BUILD_ID"
+            android:name="io.github.artifical0.huaweipods.coloros.MODULE_BUILD_ID"
             android:value="${moduleBuildId}" />
 
         <activity-alias

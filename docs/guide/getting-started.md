@@ -64,7 +64,7 @@ FreeClip、FreeClip 2 和两代 Eyewear 不提供传统主动降噪，看不到�
 5. 在设备选择页确认当前蓝牙地址绑定的是实际型号；
 6. 对照[支持状态](../support/index.md)，确认该入口确实属于当前机型。
 
-仍无法复现时，可以到 [GitHub Issues](https://github.com/Artifical0/HuaweiPods-ColorOS/issues) 提交耳机型号、手机型号、系统版本、LSPosed 版本、HuaweiPods ColorOS 版本和复现步骤，也可以加入 QQ 群 `1022359908` 参与复测。
+仍无法复现时，可以到 [GitHub Issues](https://github.com/Artifical0/HuaweiPods-ColorOS/issues) 提交耳机型号、手机型号、系统版本、LSPosed 版本、HuaweiPods ColorOS 版本和复现步骤。
 
 ## 更新或卸载
 

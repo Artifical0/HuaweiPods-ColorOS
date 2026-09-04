@@ -5,7 +5,7 @@ import java.util.UUID
 internal object SmartAudioFreeClip2BridgePolicy {
     const val SMART_AUDIO_PACKAGE = "com.huawei.smartaudio"
     const val BLUETOOTH_PACKAGE = "com.android.bluetooth"
-    const val MODULE_PACKAGE = "moe.chenxy.huaweipods.coloros"
+    const val MODULE_PACKAGE = "io.github.artifical0.huaweipods.coloros"
 
     private val bluetoothAddressPattern = Regex("^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")
 

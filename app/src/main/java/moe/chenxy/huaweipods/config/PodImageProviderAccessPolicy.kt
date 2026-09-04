@@ -1,7 +1,7 @@
 package moe.chenxy.huaweipods.config
 
 internal object PodImageProviderAccessPolicy {
-    private const val MODULE_PACKAGE = "moe.chenxy.huaweipods.coloros"
+    private const val MODULE_PACKAGE = "io.github.artifical0.huaweipods.coloros"
 
     private val imageConsumerPackages = setOf(
         "com.android.bluetooth",

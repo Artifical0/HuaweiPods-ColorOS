@@ -16,7 +16,7 @@ android {
     buildToolsVersion = "37.0.0"
 
     defaultConfig {
-        applicationId = "moe.chenxy.huaweipods.coloros"
+        applicationId = "io.github.artifical0.huaweipods.coloros"
         minSdk = 35
         targetSdk = 36
         versionCode = 13
@@ -44,6 +44,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             isDebuggable = false
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

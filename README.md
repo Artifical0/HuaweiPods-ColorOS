@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/user-attachments/assets/e8a3df6b-6e67-485a-ae1c-018ac24e87d4" width="120" height="120" alt="HuaweiPods Icon"/>
+<img src="docs/public/huaweipods-logo.png" width="120" height="120" alt="HuaweiPods Icon"/>
 
 # HuaweiPods ColorOS
 
@@ -14,14 +14,13 @@
 [下载安装](https://github.com/Artifical0/HuaweiPods-ColorOS/releases) ·
 [使用文档](https://huaweipods.npiter.de/) ·
 [赞助支持](docs/sponsor/index.md) ·
-[问题反馈](https://github.com/Artifical0/HuaweiPods-ColorOS/issues) ·
-QQ群 `1022359908`
+[问题反馈](https://github.com/Artifical0/HuaweiPods-ColorOS/issues)
 
 **简体中文** · **[English](README_EN.md)**
 
 </div>
 
-HuaweiPods ColorOS 是一个使用独立应用 ID `moe.chenxy.huaweipods.coloros` 的 Android 15+ Xposed 模块，不会被原版 HuaweiPods 的 LSPosed 商店条目覆盖更新。HyperOS 已接入系统蓝牙详情页、连接弹窗、超级岛与融合设备中心；ColorOS 已接入官方“快速设备连接”弹窗、“我的设备”耳机详情入口及 Android 16 流体云电量卡片。
+HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipods.coloros` 的 Android 15+ Xposed 模块，不会被原版 HuaweiPods 的 LSPosed 商店条目覆盖更新。HyperOS 已接入系统蓝牙详情页、连接弹窗、超级岛与融合设备中心；ColorOS 已接入官方“快速设备连接”弹窗、“我的设备”耳机详情入口及 Android 16 流体云电量卡片。
 
 > ColorOS 说明：已针对 OnePlus PLK110（ColorOS 16.1、`com.heytap.mydevices` 17.4.15）接入“我的设备”详情入口，目前仍不是完整的 ColorOS 系统面板。私有宿主会随系统更新变化，其他版本可能仅保留模块内电量和通用蓝牙详情页。
 
@@ -50,7 +49,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `moe.chenxy.huaweipods.coloros
 
 “稳定”表示已完成较充分的实机验证；“扩展支持”表示已接入更多协议控制；“基础支持”表示已接入识别、电量或核心控制。除稳定型号外，其余型号仍建议继续进行真机回归。表中未列出的官方功能不代表已经支持。
 
-需要适配其他华为耳机，可加入 QQ 群 `1022359908` 参与测试与协议采集。
+如需适配其他华为耳机，可提交 Issue 或提供脱敏抓包数据。
 
 ## 主要功能
 
@@ -99,7 +98,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `moe.chenxy.huaweipods.coloros
 
 请勿直接公开包含设备地址、账号或其他个人信息的原始采集文件。提交前请检查并脱敏，完整流程见 [华为耳机协议采集指南](docs/DEBUG_CAPTURE_GUIDE.md)。
 
-建议优先加入 QQ 群 `1022359908` 参与对应型号测试交流；可复现问题也可提交至 [GitHub Issues](https://github.com/Artifical0/HuaweiPods-ColorOS/issues)。
+可复现问题请提交至 [GitHub Issues](https://github.com/Artifical0/HuaweiPods-ColorOS/issues)。
 
 ## 构建
 

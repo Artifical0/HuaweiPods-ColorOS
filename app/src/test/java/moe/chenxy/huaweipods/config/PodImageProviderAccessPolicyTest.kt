@@ -8,7 +8,7 @@ class PodImageProviderAccessPolicyTest {
     @Test
     fun `only module and actual image scopes may open files`() {
         listOf(
-            "moe.chenxy.huaweipods.coloros",
+            "io.github.artifical0.huaweipods.coloros",
             "com.android.bluetooth",
             "com.android.settings",
             "com.milink.service",
@@ -23,7 +23,7 @@ class PodImageProviderAccessPolicyTest {
 
     @Test
     fun `only trusted identity producers may submit an identity`() {
-        assertTrue(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("moe.chenxy.huaweipods.coloros"))
+        assertTrue(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("io.github.artifical0.huaweipods.coloros"))
         assertTrue(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("com.android.bluetooth"))
         assertFalse(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("com.huawei.smartaudio"))
         assertFalse(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("com.android.settings"))
