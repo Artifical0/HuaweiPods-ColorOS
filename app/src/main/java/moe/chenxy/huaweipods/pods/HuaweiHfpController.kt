@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
@@ -19,6 +20,7 @@ import moe.chenxy.huaweipods.smartaudio.OfficialImageIdentityBridge
 import moe.chenxy.huaweipods.utils.miuiStrongToast.MiuiStrongToastUtil
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.PodParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.normalizedEarbudAvailability
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
@@ -41,7 +43,11 @@ object HuaweiHfpController {
     private const val LOW_LATENCY_AUTO_APPLY_RETRY_DELAY_MS = 2_500L
     private const val LOW_LATENCY_AUTO_APPLY_MAX_ATTEMPTS = 2
     private const val FREEBUDS3_SNAPSHOT_TTL_MS = 10 * 60_000L
+    private val CACHED_NOTIFICATION_RESTORE_DELAYS_MS = longArrayOf(400L, 1_200L)
     private const val EXTRA_STATE_CACHED = "state_cached"
+    private const val HOT_RELOAD_ADDRESS_KEY = "huawei_hfp_address"
+    private const val HOT_RELOAD_ROUTE_KEY = "huawei_hfp_route"
+    private const val HOT_RELOAD_BATTERY_KEY = "huawei_hfp_battery"
 
     private var context: Context? = null
     private var device: BluetoothDevice? = null
@@ -135,6 +141,83 @@ object HuaweiHfpController {
         }
     }
 
+    fun closeForHotReload() {
+        backgroundBatteryRefreshActive = false
+        mainHandler.removeCallbacksAndMessages(null)
+        cancelPendingSmartAudioSpatialWrite()
+        cancelPendingSmartAudioAudioQuery()
+        cancelAutoLowLatency()
+        synchronized(sessionStateLock) {
+            sessionGeneration++
+            freeClip2AudioStateTracker.reset()
+        }
+        val receiverContext = context
+        if (receiverRegistered && receiverContext != null) {
+            runCatching { receiverContext.unregisterReceiver(receiver) }
+                .onFailure { error ->
+                    if (error !is IllegalArgumentException) {
+                        Log.w(TAG, "Failed to unregister Huawei HFP receiver", error)
+                    }
+                }
+        }
+        receiverRegistered = false
+        HuaweiL2capAncController.disconnect(device)
+        context = null
+        device = null
+        sessionRoute = HuaweiDeviceRoute.UNSUPPORTED
+        currentBattery = null
+        currentAnc = HuaweiAncState(NoiseControlMode.UNKNOWN)
+        currentDeviceInfoIdentity = null
+        connectedBroadcastSent = false
+        batteryRequestInFlight = false
+        ancRequestInFlight = false
+        equalizerStateRequestInFlight = false
+        deviceInfoRequestInFlight = false
+        deviceIdentityPublishInFlight = false
+    }
+
+    /** 使用纯基础类型交接状态，避免跨 ClassLoader 传 Parcelable。 */
+    fun saveHotReloadState(outState: Bundle) {
+        synchronized(sessionStateLock) {
+            val currentDevice = device ?: return
+            val battery = currentBattery ?: return
+            outState.putString(HOT_RELOAD_ADDRESS_KEY, currentDevice.address)
+            outState.putString(HOT_RELOAD_ROUTE_KEY, sessionRoute.name)
+            outState.putIntArray(HOT_RELOAD_BATTERY_KEY, encodeHotReloadBattery(battery))
+        }
+    }
+
+    fun hotReloadSessionAddress(savedState: Bundle): String? =
+        savedState.getString(HOT_RELOAD_ADDRESS_KEY)
+
+    /** 在 HeadsetStateDispatcher 恢复会话后补回电量，并主动重建通知。 */
+    fun restoreHotReloadState(savedState: Bundle) {
+        val restoredAddress = savedState.getString(HOT_RELOAD_ADDRESS_KEY) ?: return
+        val restoredRoute = savedState.getString(HOT_RELOAD_ROUTE_KEY)
+            ?.let { runCatching { HuaweiDeviceRoute.valueOf(it) }.getOrNull() }
+            ?: return
+        val restoredBattery = savedState.getIntArray(HOT_RELOAD_BATTERY_KEY)
+            ?.let(::decodeHotReloadBattery)
+            ?: return
+        synchronized(sessionStateLock) {
+            val currentDevice = device ?: return
+            if (!currentDevice.address.equals(restoredAddress, ignoreCase = true) ||
+                sessionRoute != restoredRoute
+            ) {
+                return
+            }
+            // connectPod() 已经发起真实电量查询；若回包先到，不允许旧缓存覆盖新状态。
+            if (currentBattery != null && !currentBatteryIsCached) return
+            currentBattery = restoredBattery
+            currentBatteryIsCached = true
+            sendConnectionState("connected")
+            sendConnected(force = true)
+            sendBattery(restoredBattery, cached = true)
+        }
+        scheduleCachedNotificationRestore()
+        Log.i(TAG, "API 102 battery state restored device=$restoredAddress")
+    }
+
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val receivedIntent = intent ?: return
@@ -189,9 +272,7 @@ object HuaweiHfpController {
                     if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
                         requestFreeClip2AudioState()
                     }
-                    if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
-                        sessionRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP
-                    ) {
+                    if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
                         requestHuaweiEqualizerState()
                     }
                     if (sessionRoute.supportsLowLatencyControl) {
@@ -230,6 +311,12 @@ object HuaweiHfpController {
                 HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_SET -> {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
                     setAncLevel(receivedIntent.getIntExtra("level", currentAncLevel))
+                }
+                HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = false)) return
+                    if (sessionRoute.supportsAncStateReadback) {
+                        requestAncState(force = true)
+                    }
                 }
                 HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET -> {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
@@ -289,14 +376,16 @@ object HuaweiHfpController {
             Log.w(TAG, "Huawei session skipped: unsupported device=${device.address}")
             return
         }
-        synchronized(sessionStateLock) {
+        val restoredCachedBattery = synchronized(sessionStateLock) {
             ensureSession(context, device, route)
             val restored = restoreFreeBuds3StateAfterProcessRestart(context, device, route)
             sendConnectionState("connecting")
             sendConnected()
             restored?.battery?.let { sendBattery(it, cached = true) }
             restored?.moduleAnc?.let { sendAnc(it, cached = true) }
+            restored?.battery != null
         }
+        if (restoredCachedBattery) scheduleCachedNotificationRestore()
         requestOfficialImageIdentity(force = true)
         requestAncState(force = true)
         requestPrivateBattery()
@@ -304,9 +393,7 @@ object HuaweiHfpController {
         if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
             requestFreeClip2AudioState(force = true)
         }
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
-            route == HuaweiDeviceRoute.HUAWEI_FREECLIP
-        ) {
+        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
             requestHuaweiEqualizerState(force = true)
         }
     }
@@ -759,6 +846,7 @@ object HuaweiHfpController {
                     values.size == HuaweiEqualizerCodec.BAND_COUNT &&
                         values.all { value -> value in HuaweiEqualizerCodec.GAIN_RANGE }
                 }
+            val customPresets = it.readHuaweiEqualizerCustomPresets()
             selectedId.takeIf { value -> value in 0..0xFF }?.let { validId ->
                 HuaweiEqualizerState(
                     supported = it.getBooleanExtra(
@@ -770,7 +858,9 @@ object HuaweiHfpController {
                     bandCount = gains?.size ?: HuaweiEqualizerCodec.BAND_COUNT,
                     selectedName = it.getStringExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_EQ_NAME),
                     selectedGains = gains,
-                    customPresets = if (validId in 0x64..0x66 && gains != null) {
+                    customPresets = customPresets ?: if (
+                        validId in 0x64..0x66 && gains != null
+                    ) {
                         listOf(
                             HuaweiEqualizerPreset(
                                 id = validId,
@@ -786,7 +876,10 @@ object HuaweiHfpController {
                 )
             }
         }
-        if (mode == null && effect == null && equalizer == null) return
+        val resolvedEffect = effect ?: equalizer?.selectedId?.let(
+            SmartAudioFreeClip2BridgePolicy::soundEffectFromOfficial,
+        )
+        if (mode == null && resolvedEffect == null && equalizer == null) return
 
         pendingSmartAudioAudioQuery?.let { pending ->
             if (address.equals(pending.request.address, ignoreCase = true)) {
@@ -816,7 +909,7 @@ object HuaweiHfpController {
         val externalMode = mode.takeIf { pending == null }
         val update = FreeClip2AudioState(
             mode = externalMode,
-            effect = effect,
+            effect = resolvedEffect,
             equalizer = equalizer,
         )
         if (update.mode == null && update.effect == null && update.equalizer == null) return
@@ -827,7 +920,7 @@ object HuaweiHfpController {
         sendFreeClip2AudioState(confirmed)
         Log.i(
             TAG,
-            "FreeClip 2 official state confirmed mode=$mode effect=$effect " +
+            "FreeClip 2 official state confirmed mode=$mode effect=$resolvedEffect " +
                 "equalizer=${equalizer?.selectedId} device=$address",
         )
     }
@@ -1698,9 +1791,7 @@ object HuaweiHfpController {
         val currentContext = context ?: return
         val currentDevice = device ?: return
         val requestedRoute = sessionRoute
-        if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6I &&
-            requestedRoute != HuaweiDeviceRoute.HUAWEI_FREECLIP
-        ) return
+        if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) return
         val presetId = intent.getIntExtra(
             HuaweiPodsAction.EXTRA_HUAWEI_EQUALIZER_SELECTED_ID,
             -1,
@@ -1799,6 +1890,21 @@ object HuaweiHfpController {
         )
     }
 
+    /** 等待 API 102 的小米蓝牙新代接收器完成注册，再用缓存电量替换旧通知。 */
+    private fun scheduleCachedNotificationRestore() {
+        val currentDevice = device ?: return
+        val generation = sessionGeneration
+        val address = currentDevice.address
+        val route = sessionRoute
+        CACHED_NOTIFICATION_RESTORE_DELAYS_MS.forEach { delayMs ->
+            mainHandler.postDelayed({
+                if (!isCurrentSession(generation, address, route)) return@postDelayed
+                restoreCurrentNotification()
+                Log.i(TAG, "Cached notification restored device=$address delayMs=$delayMs")
+            }, delayMs)
+        }
+    }
+
     private fun requestFreeClip2AudioState(
         force: Boolean = false,
         pendingOnly: Boolean = false,
@@ -1882,7 +1988,30 @@ object HuaweiHfpController {
                 return@accept
             }
             if (update == null) {
-                Log.w(TAG, "FreeClip 2 audio state query returned no verified state device=${request.address}")
+                val fallback = request.pendingUpdate
+                    ?.takeIf { request.pendingOnly }
+                    ?.let { pendingUpdate ->
+                        synchronized(sessionStateLock) {
+                            freeClip2AudioStateTracker.acceptUnavailableQueryFallback(
+                                request.queryToken,
+                                pendingUpdate,
+                            )
+                        }
+                    }
+                if (fallback != null) {
+                    sendFreeClip2AudioState(fallback)
+                    Log.i(
+                        TAG,
+                        "FreeClip 2 audio state accepted after successful write; " +
+                            "firmware returned no readable confirmation device=${request.address}",
+                    )
+                } else {
+                    Log.w(
+                        TAG,
+                        "FreeClip 2 audio state query returned no verified state " +
+                            "device=${request.address}",
+                    )
+                }
                 return@accept
             }
             val confirmed = synchronized(sessionStateLock) {
@@ -1943,6 +2072,7 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_ANC_SELECT)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_CYCLE_ANC)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET)
             if (BuildConfig.DEBUG) {
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND)
@@ -2047,7 +2177,7 @@ object HuaweiHfpController {
     }
 
     private fun defaultTransparencySubMode(route: HuaweiDeviceRoute): Int =
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) 0x02 else 0xFF
+        route.defaultTransparencySubMode ?: 0xFF
 
     private fun sendGestureState(state: HuaweiGestureState) {
         val fillState: Intent.() -> Unit = {
@@ -2093,6 +2223,7 @@ object HuaweiHfpController {
                 it.selectedGains?.let { gains ->
                     putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_EQ_GAINS, gains.toIntArray())
                 }
+                putHuaweiEqualizerCustomPresets(it.customPresets)
             }
         }
         sendAppBroadcast(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_CHANGED, fillState)
@@ -2127,7 +2258,6 @@ object HuaweiHfpController {
         val currentDevice = device
         Intent(action).apply {
             putExtra("vendor", "huawei")
-            putExtra(HuaweiPodsAction.EXTRA_EVENT_ELAPSED_REALTIME, SystemClock.elapsedRealtime())
             encodeHuaweiDeviceRouteForBroadcast(sessionRoute)?.let {
                 putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)
             }
@@ -2188,6 +2318,43 @@ object HuaweiHfpController {
             .map { it.toInt(16).toByte() }
             .toByteArray()
     }
+}
+
+private const val HOT_RELOAD_POD_FIELD_COUNT = 5
+private const val HOT_RELOAD_BATTERY_FIELD_COUNT = HOT_RELOAD_POD_FIELD_COUNT * 3
+
+internal fun encodeHotReloadBattery(battery: BatteryParams): IntArray = IntArray(
+    HOT_RELOAD_BATTERY_FIELD_COUNT,
+).also { encoded ->
+    fun write(offset: Int, pod: PodParams?) {
+        encoded[offset] = if (pod == null) 0 else 1
+        if (pod == null) return
+        encoded[offset + 1] = pod.battery
+        encoded[offset + 2] = if (pod.isCharging) 1 else 0
+        encoded[offset + 3] = if (pod.isConnected) 1 else 0
+        encoded[offset + 4] = pod.rawStatus
+    }
+    write(0, battery.left)
+    write(HOT_RELOAD_POD_FIELD_COUNT, battery.right)
+    write(HOT_RELOAD_POD_FIELD_COUNT * 2, battery.case)
+}
+
+internal fun decodeHotReloadBattery(encoded: IntArray): BatteryParams? {
+    if (encoded.size != HOT_RELOAD_BATTERY_FIELD_COUNT) return null
+    fun read(offset: Int): PodParams? {
+        if (encoded[offset] == 0) return null
+        return PodParams(
+            battery = encoded[offset + 1],
+            isCharging = encoded[offset + 2] != 0,
+            isConnected = encoded[offset + 3] != 0,
+            rawStatus = encoded[offset + 4],
+        )
+    }
+    return BatteryParams(
+        left = read(0),
+        right = read(HOT_RELOAD_POD_FIELD_COUNT),
+        case = read(HOT_RELOAD_POD_FIELD_COUNT * 2),
+    )
 }
 
 private data class FreeClip2AudioWriteRequest(
@@ -2313,18 +2480,12 @@ internal fun normalizeHuaweiAncSubMode(
             ?: route.defaultAncSubMode
     }
     if (mode != NoiseControlMode.TRANSPARENCY || !route.supportsTransparency) return null
-    val accepted = when (route) {
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> setOf(0x01, 0x02)
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> setOf(0x01, 0xFF)
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS7I -> setOf(0xFF)
-        else -> emptySet()
-    }
+    val accepted = route.transparencySubModes
     if (accepted.isEmpty()) return null
     return requestedSubMode
         ?.takeIf(accepted::contains)
         ?: previousState.subMode?.takeIf { previousState.mode == mode && it in accepted }
-        ?: if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) 0x02 else 0xFF
+        ?: route.defaultTransparencySubMode
 }
 
 /**

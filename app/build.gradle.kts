@@ -19,8 +19,8 @@ android {
         applicationId = "io.github.artifical0.huaweipods.coloros"
         minSdk = 35
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.6.0-coloros.1"
+        versionCode = 14
+        versionName = "1.8.1-coloros.1"
         buildConfigField("long", "BUILD_TIMESTAMP", moduleBuildTimestamp.toString())
     }
 

@@ -97,6 +97,16 @@ object HuaweiEqualizerCodec {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> setOf(0x01, 0x02, 0x03, 0x09)
             HuaweiDeviceRoute.HUAWEI_FREECLIP -> setOf(0x01, 0x0A, 0x03, 0x09)
             HuaweiDeviceRoute.HUAWEI_FREEARC -> setOf(0x01, 0x0A, 0x02, 0x03, 0x09)
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> setOf(
+                0x02,
+                0x05,
+                0x09,
+                0x0D,
+                0x0E,
+                0x0F,
+                0x10,
+                0x11,
+            )
             else -> return null
         }
         if (presetId !in allowedIds) return null
@@ -113,6 +123,7 @@ object HuaweiEqualizerCodec {
 
     fun customWriteOperation(route: HuaweiDeviceRoute): Int? = when (route) {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> 0x01
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> 0x01
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I -> 0x00
         HuaweiDeviceRoute.HUAWEI_FREEARC -> 0x01
         else -> null
@@ -122,6 +133,7 @@ object HuaweiEqualizerCodec {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
         HuaweiDeviceRoute.HUAWEI_FREECLIP,
         HuaweiDeviceRoute.HUAWEI_FREECLIP2,
