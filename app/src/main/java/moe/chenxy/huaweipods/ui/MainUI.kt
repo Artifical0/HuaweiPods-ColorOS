@@ -58,6 +58,7 @@ import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.navigation.EarphoneDetailNavigationPolicy
 import moe.chenxy.huaweipods.navigation.EarphoneDetailNavigationState
 import moe.chenxy.huaweipods.navigation.NavigationAction
+import moe.chenxy.huaweipods.navigation.NavigationTransition
 import moe.chenxy.huaweipods.platform.SystemHeadsetSettingsIntent
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import moe.chenxy.huaweipods.pods.NoiseControlMode
