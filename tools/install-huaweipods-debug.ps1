@@ -81,7 +81,7 @@ foreach ($tool in $tools) {
                 break
             }
         } elseif ($tool -match "apkanalyzer") {
-            $dump = & $cmd.Source manifest package $apk 2>$null
+            $dump = & $cmd.Source manifest application-id $apk 2>$null
             if ($dump -and $dump.Trim()) {
                 $detectedPackage = $dump.Trim()
                 break
@@ -92,8 +92,7 @@ foreach ($tool in $tools) {
 
 if ($detectedPackage) {
     if ($detectedPackage -ne $PackageName) {
-        Write-Warning "APK package name '$detectedPackage' differs from expected '$PackageName'. Using '$detectedPackage'."
-        $PackageName = $detectedPackage
+        throw "APK package name '$detectedPackage' does not match expected '$PackageName'. Please check if you selected the right APK."
     } else {
         Write-Host "Verified APK package name: $PackageName"
     }
