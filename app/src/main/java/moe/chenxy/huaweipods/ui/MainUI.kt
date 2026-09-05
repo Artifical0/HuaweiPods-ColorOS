@@ -339,6 +339,30 @@ fun MainUI(
         }
     }
 
+    fun applyNavigationTransition(transition: NavigationTransition) {
+        earphoneNavigationState = transition.newState
+        when (transition.action) {
+            NavigationAction.SWITCH_TO_EARPHONES_TAB -> {
+                showDevicePicker = false
+                selectedTab = MainTab.Earphones
+                hasAppliedDefaultTab = true
+                pendingOpenEarphonesAfterPickerLoaded = false
+            }
+            NavigationAction.OPEN_EARPHONES_PICKER -> {
+                selectedTab = MainTab.Earphones
+                showDevicePicker = true
+                hasAppliedDefaultTab = true
+                pendingOpenEarphonesAfterPickerLoaded = false
+            }
+            NavigationAction.REQUEST_BLUETOOTH_STATUS_REFRESH -> {
+                // 请求底层蓝牙状态真实刷新，绝不假定已连接
+                sendBluetoothModuleBroadcast(context, HuaweiPodsAction.ACTION_PODS_UI_INIT)
+                sendBluetoothModuleBroadcast(context, HuaweiPodsAction.ACTION_REFRESH_STATUS)
+            }
+            NavigationAction.NONE -> Unit
+        }
+    }
+
     LaunchedEffect(navigateToEarphoneDetail.value) {
         if (navigateToEarphoneDetail.value) {
             val targetAddress = targetDeviceAddress.value
@@ -350,28 +374,10 @@ fun MainUI(
                 currentHookConnected = hookConnected.value,
                 currentConnectedAddress = connectedDeviceAddress,
             )
-            earphoneNavigationState = transition.newState
+            applyNavigationTransition(transition)
             navigateToEarphoneDetail.value = false
             targetDeviceAddress.value = null
             targetDeviceName.value = null
-
-            when (transition.action) {
-                NavigationAction.SWITCH_TO_EARPHONES_TAB -> {
-                    showDevicePicker = false
-                    selectedTab = MainTab.Earphones
-                    hasAppliedDefaultTab = true
-                    pendingOpenEarphonesAfterPickerLoaded = false
-                }
-                NavigationAction.REQUEST_BLUETOOTH_STATUS_REFRESH -> {
-                    // 请求底层蓝牙状态真实刷新，绝不假定已连接
-                    sendBluetoothModuleBroadcast(context, HuaweiPodsAction.ACTION_PODS_UI_INIT)
-                    sendBluetoothModuleBroadcast(context, HuaweiPodsAction.ACTION_REFRESH_STATUS)
-                }
-                NavigationAction.SHOW_DEVICE_PICKER -> {
-                    showDevicePicker = true
-                }
-                NavigationAction.NONE -> Unit
-            }
         }
     }
 
@@ -379,10 +385,7 @@ fun MainUI(
         if (earphoneNavigationState is EarphoneDetailNavigationState.Validating) {
             delay(5000L)
             val transition = EarphoneDetailNavigationPolicy.onTimeout(earphoneNavigationState)
-            earphoneNavigationState = transition.newState
-            if (transition.action == NavigationAction.SHOW_DEVICE_PICKER) {
-                showDevicePicker = true
-            }
+            applyNavigationTransition(transition)
             if (!hookConnected.value) {
                 Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
             }
@@ -515,15 +518,8 @@ fun MainUI(
                             incomingAddress = connectedDeviceAddress,
                             incomingName = deviceName,
                         )
-                        earphoneNavigationState = navTransition.newState
-                        if (navTransition.action == NavigationAction.SWITCH_TO_EARPHONES_TAB) {
-                            selectedTab = MainTab.Earphones
-                            hasAppliedDefaultTab = true
-                            showDevicePicker = false
-                            pendingOpenEarphonesAfterPickerLoaded = false
-                        } else if (navTransition.action == NavigationAction.SHOW_DEVICE_PICKER) {
-                            showDevicePicker = true
-                        } else if (shouldOpenEarphones) {
+                        applyNavigationTransition(navTransition)
+                        if (navTransition.action == NavigationAction.NONE && shouldOpenEarphones) {
                             if (!hasAppliedDefaultTab) {
                                 selectedTab = MainTab.Earphones
                             }
@@ -552,10 +548,7 @@ fun MainUI(
                                 incomingAddress = null,
                                 incomingName = null,
                             )
-                            earphoneNavigationState = navTransition.newState
-                            if (navTransition.action == NavigationAction.SHOW_DEVICE_PICKER) {
-                                showDevicePicker = true
-                            }
+                            applyNavigationTransition(navTransition)
                         } else if (hookConnectionState == "connecting") {
                             val incomingAddress = intent.getStringExtra("address")
                             if (!incomingAddress.isNullOrBlank() &&
@@ -588,15 +581,7 @@ fun MainUI(
                                 incomingAddress = connectedDeviceAddress,
                                 incomingName = mainTitle.value,
                             )
-                            earphoneNavigationState = navTransition.newState
-                            if (navTransition.action == NavigationAction.SWITCH_TO_EARPHONES_TAB) {
-                                selectedTab = MainTab.Earphones
-                                hasAppliedDefaultTab = true
-                                showDevicePicker = false
-                                pendingOpenEarphonesAfterPickerLoaded = false
-                            } else if (navTransition.action == NavigationAction.SHOW_DEVICE_PICKER) {
-                                showDevicePicker = true
-                            }
+                            applyNavigationTransition(navTransition)
                         }
                     }
 
@@ -618,10 +603,7 @@ fun MainUI(
                             incomingAddress = null,
                             incomingName = null,
                         )
-                        earphoneNavigationState = navTransition.newState
-                        if (navTransition.action == NavigationAction.SHOW_DEVICE_PICKER) {
-                            showDevicePicker = true
-                        }
+                        applyNavigationTransition(navTransition)
                     }
 
                     HuaweiPodsAction.ACTION_MODULE_BLUETOOTH_SERVICE_ALIVE -> {
@@ -758,7 +740,7 @@ fun MainUI(
             }
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
@@ -788,7 +770,7 @@ fun MainUI(
             this.putExtra("level", safeLevel)
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
@@ -833,7 +815,7 @@ fun MainUI(
             putExtra("device", device)
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
@@ -896,7 +878,7 @@ fun MainUI(
 
     fun refreshStatus() {
         if (hookConnected.value) {
-            context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
+            context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
                 setPackage("com.android.bluetooth")
                 addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             })
@@ -948,7 +930,7 @@ fun MainUI(
 
                 if (success && (waitForBluetooth || observeMiBluetooth)) {
                     // 新 Hook 就绪后只恢复一次；重启期间保留界面上最后一份有效状态。
-                    context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
+                    context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
                         setPackage("com.android.bluetooth")
                         putExtra(HuaweiPodsAction.EXTRA_RESTORE_NOTIFICATION, true)
                         addFlags(Intent.FLAG_RECEIVER_FOREGROUND)

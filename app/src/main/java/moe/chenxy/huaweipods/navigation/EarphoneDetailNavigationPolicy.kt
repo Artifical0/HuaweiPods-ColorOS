@@ -55,7 +55,7 @@ enum class NavigationAction {
     NONE,
     SWITCH_TO_EARPHONES_TAB,
     REQUEST_BLUETOOTH_STATUS_REFRESH,
-    SHOW_DEVICE_PICKER,
+    OPEN_EARPHONES_PICKER,
 }
 
 data class NavigationTransition(
@@ -100,7 +100,7 @@ object EarphoneDetailNavigationPolicy {
                         targetAddress = null,
                         reason = EarphoneDetailNavigationState.Unavailable.Reason.INVALID_ADDRESS,
                     ),
-                    action = NavigationAction.SHOW_DEVICE_PICKER,
+                    action = NavigationAction.OPEN_EARPHONES_PICKER,
                 )
             }
         }
@@ -137,7 +137,7 @@ object EarphoneDetailNavigationPolicy {
                     targetAddress = normalizedTarget,
                     reason = EarphoneDetailNavigationState.Unavailable.Reason.DEVICE_MISMATCH,
                 ),
-                action = NavigationAction.SHOW_DEVICE_PICKER,
+                action = NavigationAction.OPEN_EARPHONES_PICKER,
             )
         }
 
@@ -174,7 +174,7 @@ object EarphoneDetailNavigationPolicy {
                     targetAddress = currentState.targetAddress,
                     reason = EarphoneDetailNavigationState.Unavailable.Reason.DISCONNECTED,
                 ),
-                action = NavigationAction.SHOW_DEVICE_PICKER,
+                action = NavigationAction.OPEN_EARPHONES_PICKER,
             )
         }
 
@@ -195,7 +195,7 @@ object EarphoneDetailNavigationPolicy {
                     targetAddress = currentState.targetAddress,
                     reason = EarphoneDetailNavigationState.Unavailable.Reason.DEVICE_MISMATCH,
                 ),
-                action = NavigationAction.SHOW_DEVICE_PICKER,
+                action = NavigationAction.OPEN_EARPHONES_PICKER,
             )
         }
     }
@@ -210,7 +210,7 @@ object EarphoneDetailNavigationPolicy {
                     targetAddress = currentState.targetAddress,
                     reason = EarphoneDetailNavigationState.Unavailable.Reason.TIMEOUT,
                 ),
-                action = NavigationAction.SHOW_DEVICE_PICKER,
+                action = NavigationAction.OPEN_EARPHONES_PICKER,
             )
         }
         return NavigationTransition(currentState, NavigationAction.NONE)
