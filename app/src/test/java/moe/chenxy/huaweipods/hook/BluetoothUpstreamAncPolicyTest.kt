@@ -54,7 +54,7 @@ class BluetoothUpstreamAncPolicyTest {
             upstreamHuaweiAncStateForMode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3, 2, off),
         )
         assertEquals(
-            HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0xFF),
+            HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0x02),
             upstreamHuaweiAncStateForMode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5, 2, off),
         )
         assertEquals(

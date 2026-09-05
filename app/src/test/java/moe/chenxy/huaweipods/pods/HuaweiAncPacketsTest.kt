@@ -116,14 +116,14 @@ class HuaweiAncPacketsTest {
             HuaweiAncPackets.mode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5, NoiseControlMode.OFF),
         )
         assertArrayEquals(
-            hex("5A0007002B04010201FFFFEC"),
+            hex("5A0007002B0401020103D17F"),
             HuaweiAncPackets.mode(
                 HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
                 NoiseControlMode.NOISE_CANCELLATION,
             ),
         )
         assertArrayEquals(
-            hex("5A0007002B04010202FFAABF"),
+            hex("5A0007002B0401020202940D"),
             HuaweiAncPackets.mode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5, NoiseControlMode.TRANSPARENCY),
         )
     }
@@ -361,7 +361,7 @@ class HuaweiAncPacketsTest {
             HuaweiAncPackets.mode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3, NoiseControlMode.TRANSPARENCY),
         )
         assertArrayEquals(
-            hex("5A0007002B04010202FFAABF"),
+            hex("5A0007002B0401020202940D"),
             HuaweiAncPackets.mode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5, NoiseControlMode.TRANSPARENCY),
         )
     }

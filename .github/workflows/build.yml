@@ -95,11 +95,10 @@ jobs:
 
       # Non-zipped artifact upload supported by GitHub Actions
       - name: Upload Release APK
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.sign.outputs.apk }}
           path: ./${{ steps.sign.outputs.apk }}
-          archive: false
           if-no-files-found: error
 
       - name: Create GitHub Release

@@ -75,7 +75,7 @@ class DeviceCapabilitiesTest {
 
         assertTrue(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5.supportsTransparency)
         assertTrue(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5.supportsAncStateReadback)
-        assertFalse(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5.supportsDiscreteAncLevels)
+        assertTrue(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5.supportsDiscreteAncLevels)
 
         enabledHuaweiDeviceRoutes().forEach { route ->
             assertEquals(

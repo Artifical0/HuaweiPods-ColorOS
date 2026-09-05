@@ -85,7 +85,7 @@ class PopupActivity : ComponentActivity() {
         LowLatencyPrefs.syncWithRemote(prefs, HuaweiPodsApp.xposedService)
         val popupTarget = bluetoothDevice?.let { resolvePopupDeviceTarget(it, prefs) }
         if (popupTarget == null) {
-            openModule()
+            openModule(bluetoothDevice)
             finish()
             return
         }
@@ -118,38 +118,40 @@ class PopupActivity : ComponentActivity() {
     private fun openNotificationTarget(action: Int, bluetoothDevice: BluetoothDevice?) {
         when (action) {
             ConfigManager.NOTIFICATION_CLICK_SYSTEM_SETTINGS -> openSystemSettings(bluetoothDevice)
-            ConfigManager.NOTIFICATION_CLICK_SMART_AUDIO -> openSmartAudioOrModule()
-            else -> openModule()
+            ConfigManager.NOTIFICATION_CLICK_SMART_AUDIO -> openSmartAudioOrModule(bluetoothDevice)
+            else -> openModule(bluetoothDevice)
         }
     }
 
     private fun openMoreTarget(action: Int, bluetoothDevice: BluetoothDevice?) {
         when (action) {
             ConfigManager.MORE_CLICK_SYSTEM_SETTINGS -> openSystemSettings(bluetoothDevice)
-            ConfigManager.MORE_CLICK_SMART_AUDIO -> openSmartAudioOrModule()
-            else -> openModule()
+            ConfigManager.MORE_CLICK_SMART_AUDIO -> openSmartAudioOrModule(bluetoothDevice)
+            else -> openModule(bluetoothDevice)
         }
     }
 
-    private fun openModule() {
+    private fun openModule(bluetoothDevice: BluetoothDevice? = null) {
+        val device = bluetoothDevice ?: intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
         val target = Intent(this, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             putExtra(MainActivity.EXTRA_NAVIGATE_PAGE, MainActivity.PAGE_EARPHONE_DETAIL)
-            val currentDevice = popupTarget.device
-            putExtra(MainActivity.EXTRA_DEVICE_ADDRESS, currentDevice.address)
-            val deviceName = currentDevice.name ?: currentDevice.alias ?: ""
-            if (deviceName.isNotBlank()) {
-                putExtra(MainActivity.EXTRA_DEVICE_NAME, deviceName)
+            if (device != null) {
+                putExtra(MainActivity.EXTRA_DEVICE_ADDRESS, device.address)
+                val deviceName = device.name ?: device.alias ?: ""
+                if (deviceName.isNotBlank()) {
+                    putExtra(MainActivity.EXTRA_DEVICE_NAME, deviceName)
+                }
             }
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         startActivity(target)
     }
 
-    private fun openSmartAudioOrModule() {
+    private fun openSmartAudioOrModule(bluetoothDevice: BluetoothDevice? = null) {
         packageManager.getLaunchIntentForPackage("com.huawei.smartaudio")
             ?.let(::startActivity)
-            ?: openModule()
+            ?: openModule(bluetoothDevice)
     }
 
     @SuppressLint("MissingPermission")
@@ -158,7 +160,7 @@ class PopupActivity : ComponentActivity() {
             openModule()
             return
         }
-        if (!SystemHeadsetSettingsIntent.open(this, bluetoothDevice)) openModule()
+        if (!SystemHeadsetSettingsIntent.open(this, bluetoothDevice)) openModule(bluetoothDevice)
     }
 
     private fun Intent.parcelableDevice(key: String): BluetoothDevice? {
