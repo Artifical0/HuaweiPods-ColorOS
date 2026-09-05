@@ -90,7 +90,7 @@ class EarphoneDetailNavigationPolicyTest {
             incomingName = null,
         )
 
-        assertEquals(NavigationAction.SHOW_DEVICE_PICKER, statusTransition.action)
+        assertEquals(NavigationAction.OPEN_EARPHONES_PICKER, statusTransition.action)
         assertTrue(statusTransition.newState is EarphoneDetailNavigationState.Unavailable)
         val unavailable = statusTransition.newState as EarphoneDetailNavigationState.Unavailable
         assertEquals(EarphoneDetailNavigationState.Unavailable.Reason.DISCONNECTED, unavailable.reason)
@@ -112,7 +112,7 @@ class EarphoneDetailNavigationPolicyTest {
         // 2. 底层无任何响应，触发超时
         val timeoutTransition = EarphoneDetailNavigationPolicy.onTimeout(validating)
 
-        assertEquals(NavigationAction.SHOW_DEVICE_PICKER, timeoutTransition.action)
+        assertEquals(NavigationAction.OPEN_EARPHONES_PICKER, timeoutTransition.action)
         assertTrue(timeoutTransition.newState is EarphoneDetailNavigationState.Unavailable)
         val unavailable = timeoutTransition.newState as EarphoneDetailNavigationState.Unavailable
         assertEquals(EarphoneDetailNavigationState.Unavailable.Reason.TIMEOUT, unavailable.reason)
@@ -132,7 +132,7 @@ class EarphoneDetailNavigationPolicyTest {
             currentConnectedAddress = validMacB,
         )
 
-        assertEquals(NavigationAction.SHOW_DEVICE_PICKER, transition.action)
+        assertEquals(NavigationAction.OPEN_EARPHONES_PICKER, transition.action)
         assertTrue(transition.newState is EarphoneDetailNavigationState.Unavailable)
         val unavailable = transition.newState as EarphoneDetailNavigationState.Unavailable
         assertEquals(EarphoneDetailNavigationState.Unavailable.Reason.DEVICE_MISMATCH, unavailable.reason)
@@ -153,7 +153,7 @@ class EarphoneDetailNavigationPolicyTest {
             incomingName = deviceNameB,
         )
 
-        assertEquals(NavigationAction.SHOW_DEVICE_PICKER, statusTransition.action)
+        assertEquals(NavigationAction.OPEN_EARPHONES_PICKER, statusTransition.action)
         assertTrue(statusTransition.newState is EarphoneDetailNavigationState.Unavailable)
         val unavailable = statusTransition.newState as EarphoneDetailNavigationState.Unavailable
         assertEquals(EarphoneDetailNavigationState.Unavailable.Reason.DEVICE_MISMATCH, unavailable.reason)
@@ -173,7 +173,7 @@ class EarphoneDetailNavigationPolicyTest {
             EarphoneDetailNavigationState.Unavailable.Reason.TIMEOUT,
             (transition.newState as EarphoneDetailNavigationState.Unavailable).reason,
         )
-        assertEquals(NavigationAction.SHOW_DEVICE_PICKER, transition.action)
+        assertEquals(NavigationAction.OPEN_EARPHONES_PICKER, transition.action)
     }
 
     @Test
@@ -216,7 +216,7 @@ class EarphoneDetailNavigationPolicyTest {
             currentHookConnected = false,
             currentConnectedAddress = null,
         )
-        assertEquals(NavigationAction.SHOW_DEVICE_PICKER, nullAddressTransition.action)
+        assertEquals(NavigationAction.OPEN_EARPHONES_PICKER, nullAddressTransition.action)
         assertTrue(nullAddressTransition.newState is EarphoneDetailNavigationState.Unavailable)
 
         val emptyAddressTransition = EarphoneDetailNavigationPolicy.onRequestNavigation(
@@ -226,7 +226,7 @@ class EarphoneDetailNavigationPolicyTest {
             currentHookConnected = false,
             currentConnectedAddress = null,
         )
-        assertEquals(NavigationAction.SHOW_DEVICE_PICKER, emptyAddressTransition.action)
+        assertEquals(NavigationAction.OPEN_EARPHONES_PICKER, emptyAddressTransition.action)
         assertTrue(emptyAddressTransition.newState is EarphoneDetailNavigationState.Unavailable)
     }
 
