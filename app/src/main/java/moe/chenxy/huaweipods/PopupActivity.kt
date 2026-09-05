@@ -131,6 +131,7 @@ class PopupActivity : ComponentActivity() {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private fun openModule(bluetoothDevice: BluetoothDevice? = null) {
         val device = bluetoothDevice ?: intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
         val target = Intent(this, MainActivity::class.java).apply {
@@ -138,8 +139,11 @@ class PopupActivity : ComponentActivity() {
             putExtra(MainActivity.EXTRA_NAVIGATE_PAGE, MainActivity.PAGE_EARPHONE_DETAIL)
             if (device != null) {
                 putExtra(MainActivity.EXTRA_DEVICE_ADDRESS, device.address)
-                val deviceName = device.name ?: device.alias ?: ""
-                if (deviceName.isNotBlank()) {
+                val deviceName = runCatching {
+                    device.name?.takeIf(String::isNotBlank)
+                        ?: device.alias?.takeIf(String::isNotBlank)
+                }.getOrNull()
+                if (!deviceName.isNullOrBlank()) {
                     putExtra(MainActivity.EXTRA_DEVICE_NAME, deviceName)
                 }
             }
