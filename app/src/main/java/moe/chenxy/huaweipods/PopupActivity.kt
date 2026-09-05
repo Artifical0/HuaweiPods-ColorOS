@@ -2,6 +2,8 @@ package moe.chenxy.huaweipods
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
+import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
+import moe.chenxy.huaweipods.utils.safeDisplayName
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -139,11 +141,8 @@ class PopupActivity : ComponentActivity() {
             putExtra(MainActivity.EXTRA_NAVIGATE_PAGE, MainActivity.PAGE_EARPHONE_DETAIL)
             if (device != null) {
                 putExtra(MainActivity.EXTRA_DEVICE_ADDRESS, device.address)
-                val deviceName = runCatching {
-                    device.name?.takeIf(String::isNotBlank)
-                        ?: device.alias?.takeIf(String::isNotBlank)
-                }.getOrNull()
-                if (!deviceName.isNullOrBlank()) {
+                val deviceName = device.safeDisplayName()
+                if (deviceName.isNotBlank()) {
                     putExtra(MainActivity.EXTRA_DEVICE_NAME, deviceName)
                 }
             }
@@ -177,11 +176,7 @@ class PopupActivity : ComponentActivity() {
         prefs: android.content.SharedPreferences,
     ): PopupDeviceTarget? {
         val address = runCatching { device.address }.getOrNull()
-        val deviceName = runCatching {
-            device.name?.takeIf(String::isNotBlank)
-                ?: device.alias?.takeIf(String::isNotBlank)
-                ?: ""
-        }.getOrDefault("")
+        val deviceName = device.safeDisplayName()
         val route = DeviceRoutePrefs.resolve(
             prefs = prefs,
             address = address,
@@ -230,6 +225,7 @@ private fun PopupContent(
         object : BroadcastReceiver() {
             override fun onReceive(p0: Context?, p1: Intent?) {
                 val intent = p1 ?: return
+                if (!HuaweiPodsBroadcastTrustPolicy.isTrustedBluetoothStateSender(sentFromPackage)) return
                 val identity = PopupBroadcastIdentity(
                     address = intent.getStringExtra("address"),
                     deviceName = intent.getStringExtra("device_name"),

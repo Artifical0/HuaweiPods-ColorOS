@@ -21,6 +21,8 @@ import moe.chenxy.huaweipods.pods.HuaweiL2capAncController
 import moe.chenxy.huaweipods.pods.huaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.smartaudio.OfficialImageIdentityBridge
+import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
+import moe.chenxy.huaweipods.utils.safeDisplayName
 import moe.chenxy.huaweipods.utils.SystemApisUtils.setIconVisibility
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
@@ -164,7 +166,15 @@ object HeadsetStateDispatcher : HookContext() {
                     if (context == null) return
                     val receivedIntent = intent ?: return
                     runCatching {
-                        when (HuaweiPodsAction.canonical(receivedIntent.action)) {
+                        val action = HuaweiPodsAction.canonical(receivedIntent.action)
+                        if (!HuaweiPodsBroadcastTrustPolicy.isTrustedAppControlSender(sentFromPackage)) {
+                            Log.w(
+                                "HuaweiPods",
+                                "Rejected app request from untrusted sender action=$action sender=${sentFromPackage.orEmpty()}",
+                            )
+                            return@runCatching
+                        }
+                        when (action) {
                             HuaweiPodsAction.ACTION_PODS_UI_INIT,
                             HuaweiPodsAction.ACTION_REFRESH_STATUS -> {
                                 restoreConnectedHuaweiPods(context)
@@ -177,7 +187,7 @@ object HeadsetStateDispatcher : HookContext() {
                             HuaweiPodsAction.ACTION_CONNECT_POD_REQUEST -> {
                                 val device = receivedIntent.getParcelableExtra("device", BluetoothDevice::class.java)
                                     ?: return@runCatching
-                                Log.d("HuaweiPods", "connect request from app device=${device.name}/${device.address}")
+                                Log.d("HuaweiPods", "connect request from app device=${device.safeDisplayName()}/${device.address}")
                                 val supported = isHuaweiPod(device)
                                 if (supported && isDeviceConnected(device)) {
                                     HuaweiHfpController.connectPod(context, device)
@@ -195,18 +205,7 @@ object HeadsetStateDispatcher : HookContext() {
                                 }
                             }
                             HuaweiPodsAction.ACTION_DEVICE_ROUTE_PROBE_REQUEST -> {
-                                if (
-                                    HuaweiDeviceRouteProbePolicy.isTrustedRequestSender(
-                                        sentFromPackage,
-                                    )
-                                ) {
-                                    handleDeviceRouteProbeRequest(context, receivedIntent)
-                                } else {
-                                    Log.w(
-                                        "HuaweiPods",
-                                        "Rejected route probe sender=${sentFromPackage.orEmpty()}",
-                                    )
-                                }
+                                handleDeviceRouteProbeRequest(context, receivedIntent)
                             }
                         }
                     }.onFailure {
@@ -347,7 +346,7 @@ object HeadsetStateDispatcher : HookContext() {
         reason: String = "unsupported",
         supported: Boolean = false,
     ) {
-        val deviceName = device.name ?: device.alias ?: ""
+        val deviceName = device.safeDisplayName()
         Log.w(
             "HuaweiPods",
             "rejected device $operation request reason=$reason device=$deviceName/${device.address}",

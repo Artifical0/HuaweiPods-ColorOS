@@ -54,7 +54,9 @@ import moe.chenxy.huaweipods.config.PodImagePrefs
 import moe.chenxy.huaweipods.config.PodImageChangeNotifier
 import moe.chenxy.huaweipods.config.PodImageResource
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.platform.SystemHeadsetSettingsIntent
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.UNKNOWN_HUAWEI_ANC_SUBMODE
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
@@ -321,7 +323,7 @@ fun MainUI(
             putExtra("device", pendingDevice)
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
@@ -389,6 +391,7 @@ fun MainUI(
         object : BroadcastReceiver() {
             override fun onReceive(p0: Context?, p1: Intent?) {
                 val intent = p1 ?: return
+                if (!HuaweiPodsBroadcastTrustPolicy.shouldAcceptBroadcast(intent.action, sentFromPackage)) return
                 when (HuaweiPodsAction.canonical(intent.action)) {
                     HuaweiPodsAction.ACTION_PODS_ANC_CHANGED -> {
                         connectedDeviceAddress = intent.getStringExtra("address") ?: connectedDeviceAddress
@@ -1318,7 +1321,7 @@ private fun sendBluetoothModuleBroadcast(context: Context, action: String) {
         Intent(action).apply {
             setPackage(packageName)
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 }

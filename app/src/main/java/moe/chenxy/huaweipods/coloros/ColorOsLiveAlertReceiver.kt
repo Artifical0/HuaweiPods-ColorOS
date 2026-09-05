@@ -21,6 +21,7 @@ import android.util.Log
 import moe.chenxy.huaweipods.MainActivity
 import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.config.ConfigManager
+import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.platform.RomFamily
 import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.utils.PodImageLoader
@@ -49,9 +50,9 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (
             intent.action in TRUSTED_BLUETOOTH_ACTIONS &&
-            sentFromPackage != BLUETOOTH_PACKAGE
+            !HuaweiPodsBroadcastTrustPolicy.isTrustedBluetoothStateSender(sentFromPackage)
         ) {
-            Log.w(TAG, "Rejected headset status broadcast from an untrusted sender")
+            Log.w(TAG, "Rejected headset status broadcast from an untrusted sender: $sentFromPackage")
             return
         }
         val isColorOs = RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND) ==
@@ -184,9 +185,10 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
         val largeIcon = address.takeIf(String::isNotBlank)
             ?.let { PodImageLoader.loadBoxBitmap(context, prefs, it) }
             ?: BitmapFactory.decodeResource(context.resources, R.drawable.img_freeclip_box)
+        val requestCode = if (address.isNotBlank()) address.hashCode() else 0
         val contentIntent = PendingIntent.getActivity(
             context,
-            0,
+            requestCode,
             Intent(context, MainActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
                 putExtra(MainActivity.EXTRA_NAVIGATE_PAGE, MainActivity.PAGE_EARPHONE_DETAIL)
