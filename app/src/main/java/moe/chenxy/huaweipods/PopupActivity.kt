@@ -132,7 +132,18 @@ class PopupActivity : ComponentActivity() {
     }
 
     private fun openModule() {
-        startActivity(Intent(this, MainActivity::class.java))
+        val target = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            putExtra(MainActivity.EXTRA_NAVIGATE_PAGE, MainActivity.PAGE_EARPHONE_DETAIL)
+            val currentDevice = popupTarget.device
+            putExtra(MainActivity.EXTRA_DEVICE_ADDRESS, currentDevice.address)
+            val deviceName = currentDevice.name ?: currentDevice.alias ?: ""
+            if (deviceName.isNotBlank()) {
+                putExtra(MainActivity.EXTRA_DEVICE_NAME, deviceName)
+            }
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        startActivity(target)
     }
 
     private fun openSmartAudioOrModule() {

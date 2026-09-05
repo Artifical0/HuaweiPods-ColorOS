@@ -169,6 +169,8 @@ object MiBluetoothToastHook : HookContext() {
                 putExtra(BluetoothDevice.EXTRA_DEVICE, bluetoothDevice)
                 putExtra("bluetoothaddress", bluetoothDevice.address)
                 putExtra("device_name", deviceName)
+                putExtra("navigate_page", "earphone_detail")
+                putExtra("device_address", bluetoothDevice.address)
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,

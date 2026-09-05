@@ -19,15 +19,43 @@ import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.ui.App
 import moe.chenxy.huaweipods.ui.AppLocale
 
+import android.content.Intent
+
 class MainActivity : ComponentActivity() {
+    private val navigateToEarphoneDetail = mutableStateOf(false)
+    private val targetDeviceAddress = mutableStateOf<String?>(null)
+    private val targetDeviceName = mutableStateOf<String?>(null)
+
     override fun attachBaseContext(newBase: Context) {
         AppLocale.rememberDeviceLocale(newBase)
         AppLocale.apply(newBase, newBase.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE).getInt("app_language", AppLocale.SYSTEM))
         super.attachBaseContext(newBase)
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        val isDetail = intent.getStringExtra(EXTRA_NAVIGATE_PAGE) == PAGE_EARPHONE_DETAIL ||
+            intent.getBooleanExtra("open_earphone_detail", false)
+        if (isDetail) {
+            navigateToEarphoneDetail.value = true
+            intent.getStringExtra(EXTRA_DEVICE_ADDRESS)?.takeIf(String::isNotBlank)?.let {
+                targetDeviceAddress.value = it
+            }
+            intent.getStringExtra(EXTRA_DEVICE_NAME)?.takeIf(String::isNotBlank)?.let {
+                targetDeviceName.value = it
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleIntent(intent)
 
         val lifecyclePrefs = AppLifecyclePrefs(this)
         val launchDecision = lifecyclePrefs.consumeLaunchDecision(
@@ -62,6 +90,9 @@ class MainActivity : ComponentActivity() {
 
             App(
                 initialLaunchDecision = launchDecision,
+                navigateToEarphoneDetail = navigateToEarphoneDetail,
+                targetDeviceAddress = targetDeviceAddress,
+                targetDeviceName = targetDeviceName,
                 themeMode = themeMode,
                 onThemeModeChange = {
                     themeMode.value = it
@@ -114,5 +145,12 @@ class MainActivity : ComponentActivity() {
         if (missingPermissions.isNotEmpty()) {
             requestPermissions(missingPermissions.toTypedArray(), 1001)
         }
+    }
+
+    companion object {
+        const val EXTRA_NAVIGATE_PAGE = "navigate_page"
+        const val PAGE_EARPHONE_DETAIL = "earphone_detail"
+        const val EXTRA_DEVICE_ADDRESS = "device_address"
+        const val EXTRA_DEVICE_NAME = "device_name"
     }
 }

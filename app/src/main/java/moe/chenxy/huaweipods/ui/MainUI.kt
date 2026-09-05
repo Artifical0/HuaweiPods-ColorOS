@@ -131,6 +131,9 @@ fun MainUI(
     onBlurBottomBarChange: (Boolean) -> Unit = {},
     appLanguage: MutableState<Int> = mutableStateOf(AppLocale.SYSTEM),
     onAppLanguageChange: (Int) -> Unit = {},
+    navigateToEarphoneDetail: MutableState<Boolean> = remember { mutableStateOf(false) },
+    targetDeviceAddress: MutableState<String?> = remember { mutableStateOf(null) },
+    targetDeviceName: MutableState<String?> = remember { mutableStateOf(null) },
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -325,6 +328,28 @@ fun MainUI(
     LaunchedEffect(displayTitle) {
         if (displayTitle.isNotEmpty()) {
             mainTitle.value = displayTitle
+        }
+    }
+
+    LaunchedEffect(navigateToEarphoneDetail.value) {
+        if (navigateToEarphoneDetail.value) {
+            val targetAddress = targetDeviceAddress.value
+            val targetName = targetDeviceName.value
+            if (!targetAddress.isNullOrBlank()) {
+                connectedDeviceAddress = targetAddress
+            }
+            if (!targetName.isNullOrBlank()) {
+                mainTitle.value = targetName
+            }
+            hookConnected.value = true
+            hookConnectionState = "connected"
+            showDevicePicker = false
+            selectedTab = MainTab.Earphones
+            hasAppliedDefaultTab = true
+            pendingOpenEarphonesAfterPickerLoaded = false
+            navigateToEarphoneDetail.value = false
+            sendBluetoothModuleBroadcast(context, HuaweiPodsAction.ACTION_PODS_UI_INIT)
+            sendBluetoothModuleBroadcast(context, HuaweiPodsAction.ACTION_REFRESH_STATUS)
         }
     }
 

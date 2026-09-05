@@ -24,6 +24,9 @@ fun App(
         showOnboarding = false,
         showUpdated = false,
     ),
+    navigateToEarphoneDetail: MutableState<Boolean> = mutableStateOf(false),
+    targetDeviceAddress: MutableState<String?> = mutableStateOf(null),
+    targetDeviceName: MutableState<String?> = mutableStateOf(null),
     themeMode: MutableState<Int> = mutableStateOf(0),
     onThemeModeChange: (Int) -> Unit = {},
     accentMode: MutableState<Int> = mutableStateOf(0),
@@ -47,6 +50,19 @@ fun App(
     var onboardingIsReplay by remember { mutableStateOf(false) }
     var showUpdatedDialog by remember { mutableStateOf(initialLaunchDecision.showUpdated) }
     var xposedService by remember { mutableStateOf(HuaweiPodsApp.xposedService) }
+
+    LaunchedEffect(navigateToEarphoneDetail.value) {
+        if (navigateToEarphoneDetail.value) {
+            if (showOnboarding) {
+                showOnboarding = false
+                onboardingIsReplay = false
+            }
+            if (backStack.size > 1) {
+                backStack.clear()
+                backStack.add(Screen.Main)
+            }
+        }
+    }
 
     DisposableEffect(Unit) {
         val listener: (io.github.libxposed.service.XposedService?) -> Unit = {
@@ -95,6 +111,9 @@ fun App(
             } else {
                 MainUI(
                     backStack = backStack,
+                    navigateToEarphoneDetail = navigateToEarphoneDetail,
+                    targetDeviceAddress = targetDeviceAddress,
+                    targetDeviceName = targetDeviceName,
                     showUpdatedDialogOnLaunch = showUpdatedDialog,
                     onUpdatedDialogHandled = ::acknowledgeUpdatedVersion,
                     onOpenOnboarding = {

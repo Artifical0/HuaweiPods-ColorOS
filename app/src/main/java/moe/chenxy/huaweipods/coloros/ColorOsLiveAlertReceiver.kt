@@ -187,9 +187,17 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
         val contentIntent = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java).addFlags(
-                Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP,
-            ),
+            Intent(context, MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                putExtra(MainActivity.EXTRA_NAVIGATE_PAGE, MainActivity.PAGE_EARPHONE_DETAIL)
+                if (address.isNotBlank()) {
+                    putExtra(MainActivity.EXTRA_DEVICE_ADDRESS, address)
+                }
+                intent.getStringExtra("device_name")?.takeIf(String::isNotBlank)?.let {
+                    putExtra(MainActivity.EXTRA_DEVICE_NAME, it)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = Notification.Builder(context, CHANNEL_ID)
