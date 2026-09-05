@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.utils.safeDisplayName
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -367,7 +368,7 @@ private fun PopupContent(
             }
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
@@ -393,14 +394,14 @@ private fun PopupContent(
             putExtra("level", safeLevel)
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
     fun setLowLatency(enabled: Boolean) {
         if (!target.route.supportsLowLatencyControl) return
         lowLatencyEnabled.value = enabled
-        context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET).apply {
+        context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET).apply {
             putPopupTarget(target)
             putExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED, enabled)
             setPackage("com.android.bluetooth")

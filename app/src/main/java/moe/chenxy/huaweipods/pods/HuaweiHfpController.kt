@@ -13,6 +13,7 @@ import android.os.Process
 import android.os.SystemClock
 import java.util.UUID
 import moe.chenxy.huaweipods.BuildConfig
+import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.LowLatencyPrefs
 import moe.chenxy.huaweipods.hook.Log
@@ -221,6 +222,11 @@ object HuaweiHfpController {
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val receivedIntent = intent ?: return
+            val action = receivedIntent.action ?: return
+            if (!HuaweiPodsBroadcastTrustPolicy.shouldAcceptBroadcast(action, sentFromPackage)) {
+                Log.w(TAG, "Rejected untrusted broadcast action=$action sender=$sentFromPackage")
+                return
+            }
             if (receivedIntent.action == BluetoothDevice.ACTION_BOND_STATE_CHANGED) {
                 val changedDevice = receivedIntent.getParcelableExtra(
                     BluetoothDevice.EXTRA_DEVICE,
