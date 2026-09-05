@@ -2258,6 +2258,7 @@ object HuaweiHfpController {
         val currentDevice = device
         Intent(action).apply {
             putExtra("vendor", "huawei")
+            putExtra(HuaweiPodsAction.EXTRA_EVENT_ELAPSED_REALTIME, SystemClock.elapsedRealtime())
             encodeHuaweiDeviceRouteForBroadcast(sessionRoute)?.let {
                 putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)
             }
@@ -2283,6 +2284,7 @@ object HuaweiHfpController {
         ).forEach { targetPackage ->
             Intent(action).apply {
                 putExtra("vendor", "huawei")
+                putExtra(HuaweiPodsAction.EXTRA_EVENT_ELAPSED_REALTIME, SystemClock.elapsedRealtime())
                 encodeHuaweiDeviceRouteForBroadcast(sessionRoute)?.let {
                     putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)
                 }
