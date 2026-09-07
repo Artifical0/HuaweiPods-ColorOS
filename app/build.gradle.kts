@@ -19,8 +19,9 @@ android {
         applicationId = "io.github.artifical0.huaweipods.coloros"
         minSdk = 35
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.8.1-coloros.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 15
+        versionName = "1.8.1-coloros.2"
         buildConfigField("long", "BUILD_TIMESTAMP", moduleBuildTimestamp.toString())
     }
 
@@ -94,6 +95,7 @@ dependencies {
     implementation(libs.libxposedService)
     implementation(libs.kotlinx.serialization.json)
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.7.0")
 
     // Compose
     implementation(platform(libs.compose.bom))

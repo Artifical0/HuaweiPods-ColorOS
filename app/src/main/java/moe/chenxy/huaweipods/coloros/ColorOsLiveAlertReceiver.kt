@@ -18,6 +18,7 @@ import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import moe.chenxy.huaweipods.MainActivity
 import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.config.ConfigManager
@@ -44,6 +45,15 @@ internal fun shouldAcceptColorOsLiveAlertBatteryUpdate(
     lastDisconnectElapsed: Long,
     eventElapsed: Long,
 ): Boolean = lastDisconnectElapsed <= 0L || eventElapsed > lastDisconnectElapsed
+
+internal fun NotificationCompat.Builder.requestColorOsLiveAlert(chipText: String?) = apply {
+    // ColorOS 16 also supports promotion on API 36.0. AndroidX writes
+    // the compatible extra without calling the platform's 36.1 setter.
+    if (Build.VERSION.SDK_INT >= 36) {
+        setRequestPromotedOngoing(true)
+        chipText?.let(::setShortCriticalText)
+    }
+}
 
 /** Publishes the Android 16 promoted ongoing notification rendered as ColorOS Fluid Cloud. */
 class ColorOsLiveAlertReceiver : BroadcastReceiver() {
@@ -202,7 +212,7 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val notification = Notification.Builder(context, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentTitle(
                 intent.getStringExtra("device_name")
@@ -210,23 +220,15 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
                     ?: context.getString(R.string.coloros_live_alert_fallback_title),
             )
             .setContentText(contentText)
-            .setStyle(Notification.BigTextStyle().bigText(contentText))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
             .setContentIntent(contentIntent)
             .setCategory(Notification.CATEGORY_STATUS)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .apply { largeIcon?.let(::setLargeIcon) }
-            .apply {
-                if (
-                    Build.VERSION.SDK_INT >= 36 &&
-                    Build.VERSION.SDK_INT_FULL >= Build.VERSION_CODES_FULL.BAKLAVA_1
-                ) {
-                    setRequestPromotedOngoing(true)
-                    colorOsLiveAlertChipText(left, right, case)?.let(::setShortCriticalText)
-                }
-            }
+            .requestColorOsLiveAlert(colorOsLiveAlertChipText(left, right, case))
             .build()
         if (Build.VERSION.SDK_INT >= 36) {
             Log.d(
