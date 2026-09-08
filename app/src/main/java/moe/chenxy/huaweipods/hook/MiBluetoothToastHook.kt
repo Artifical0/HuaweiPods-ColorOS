@@ -43,6 +43,7 @@ import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.R
 import java.util.concurrent.ConcurrentHashMap
@@ -612,7 +613,7 @@ object MiBluetoothToastHook : HookContext() {
                                         Log.w("HuaweiPods", "skip ready signal: stale Hook build")
                                         return@runCatching
                                     }
-                                    context.sendBroadcast(
+                                    context.sendIdentitySharingBroadcast(
                                         Intent(HuaweiPodsAction.ACTION_MODULE_MI_BLUETOOTH_SERVICE_ALIVE).apply {
                                             setPackage(BuildConfig.APPLICATION_ID)
                                             putExtra(

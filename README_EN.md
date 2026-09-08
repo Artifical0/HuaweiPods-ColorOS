@@ -22,6 +22,16 @@ HuaweiPods ColorOS is an Android 15+ Xposed module with the independent applicat
 
 The unified build supports the 14 models below in one APK. Model-specific test APKs are no longer distributed.
 
+## ColorOS startup and Live Alerts (1.8.1-coloros.3)
+
+Enable HuaweiPods ColorOS in the system auto-launch settings. Under App info → Battery management, allow all background activity (this may increase battery usage). Grant Bluetooth and notification permissions, enable Live Alerts, and open the app once after installation. Recheck these settings after reinstalling.
+
+After updating, restart the Bluetooth scope or reboot the phone to load the new module; the headset will briefly disconnect. Version 1.8.1-coloros.3 fixes false module-service timeouts caused by heartbeat broadcasts omitting sender identity, retaining the Android 16.0 Live Alert fix from 1.8.1-coloros.2.
+
+Verified on 2026-09-08 with OnePlus PLK110, `PLK110_16.0.10.500(CN01)`, Android 16 (API 36), and HUAWEI FreeClip: module-service status and Live Alerts work; after terminating the app process and restarting Bluetooth, reconnecting the headset restores the Live Alert without opening the app. Recovery after a full phone reboot has not been tested.
+
+Versions from 1.8.1-coloros.2 use a stable release key and support in-place updates. Earlier builds signed with the old key require reinstalling, which clears local app data; save your settings first.
+
 ## Supported models
 
 | Model | Status | Integrated capabilities |
