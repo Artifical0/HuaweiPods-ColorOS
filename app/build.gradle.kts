@@ -91,8 +91,11 @@ configurations.configureEach {
 
 dependencies {
     implementation(libs.coreKtx)
-    compileOnly(libs.libxposedApi)
-    implementation(libs.libxposedService)
+    // 正式版按 API 102 编译以支持热重载，并在运行时兼容 101 框架；协议采集 Debug 版固定 API 101。
+    debugCompileOnly(libs.libxposedApi)
+    debugImplementation(libs.libxposedService)
+    releaseCompileOnly(libs.libxposedApi102)
+    releaseImplementation(libs.libxposedService102)
     implementation(libs.kotlinx.serialization.json)
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.7.0")
@@ -117,4 +120,11 @@ dependencies {
 
     // HyperOS Focus Island API
     implementation(libs.focus.api)
+}
+
+configurations.matching { it.name.startsWith("release") }.configureEach {
+    resolutionStrategy.force(
+        "io.github.libxposed:api:${libs.versions.libxposedApi102.get()}",
+        "io.github.libxposed:service:${libs.versions.libxposedService102.get()}"
+    )
 }

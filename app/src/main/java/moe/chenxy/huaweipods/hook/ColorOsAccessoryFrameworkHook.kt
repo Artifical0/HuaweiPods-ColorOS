@@ -51,6 +51,8 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
     @Volatile
     private var receiverRegistered = false
     @Volatile
+    private var handshakeReceiver: BroadcastReceiver? = null
+    @Volatile
     private var accessoryContext: Context? = null
     @Volatile
     private var popupImageFileName: String? = null
@@ -142,6 +144,25 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
         ) {
             (args[0] as? Context)?.let(::registerHostHandshake)
         }
+        // API 102 热重载不会重放 Application.attach()；新代直接用当前 Application 恢复握手。
+        currentApplicationOrNull()?.let(::registerHostHandshake)
+    }
+
+    override fun onClose() {
+        synchronized(registrationLock) {
+            val receiver = handshakeReceiver
+            val context = accessoryContext
+            if (receiver != null && context != null) {
+                runCatching { context.unregisterReceiver(receiver) }
+            }
+            handshakeReceiver = null
+            receiverRegistered = false
+        }
+        accessoryContext = null
+        popupImageFileName = null
+        popupFallbackDrawableName = null
+        synchronized(automaticCloseSuppressed) { automaticCloseSuppressed.clear() }
+        synchronized(lastUserTouchElapsed) { lastUserTouchElapsed.clear() }
     }
 
     /** Marks close callbacks reached synchronously from a real ColorOS view click. */
@@ -248,6 +269,7 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
                     Context.RECEIVER_EXPORTED,
                 )
             }.onSuccess {
+                handshakeReceiver = receiver
                 receiverRegistered = true
                 sendReady(context)
             }.onFailure {
