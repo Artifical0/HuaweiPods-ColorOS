@@ -16,19 +16,29 @@
 
 </div>
 
-HuaweiPods ColorOS is an Android 15+ Xposed module with the independent application ID `io.github.artifical0.huaweipods.coloros`, so the original HuaweiPods LSPosed marketplace entry cannot replace it. HyperOS integration includes the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page. ColorOS integration includes the official Quick Device Connect popup, the My Devices headset-detail entry, and an Android 16 Live Alert / Fluid Cloud battery card.
+HuaweiPods ColorOS is an Android 15+ Xposed module with the independent application ID `io.github.artifical0.huaweipods.coloros`, so the original HuaweiPods LSPosed marketplace entry cannot replace it. ColorOS integration includes the official Quick Device Connect popup, the My Devices headset-detail entry, the system earphone battery channel, and an Android 16+ Live Alert / Fluid Cloud battery card. HyperOS keeps the upstream system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page integration.
 
-> The My Devices entry was verified against OnePlus PLK110 (ColorOS 16.1, `com.heytap.mydevices` 17.4.15). This is not yet a complete ColorOS system panel; private hosts change between system updates, so other builds may fall back to the module UI and standard Bluetooth detail page.
+> The My Devices entry supports both the ColorOS 16.1 (`com.heytap.mydevices` 17.4.15) and ColorOS 17 (17.25.10) detail pages. The ColorOS 17 work was checked statically against OnePlus PLK110 `PLK110_17.0.0.102(CN01)` firmware and still needs on-device verification. Private hosts change between system updates; unknown builds fall back to the stock pages while keeping the module UI, Live Alerts, and the standard Bluetooth detail page.
 
 The unified build supports the 16 models below in one APK. Model-specific test APKs are no longer distributed.
 
-## ColorOS startup and Live Alerts (1.8.1-coloros.3)
+## ColorOS 17 adaptation and native integration (1.8.3-coloros.1)
+
+- Syncs upstream HuaweiPods 1.8.3: HUAWEI FreeBuds SE 4 ANC support, saving successful low-latency writes from the module popup, and the 1.7.x–1.8.x protocol, UI, and stability updates.
+- **System earphone battery**: the Bluetooth process publishes left, right, and case battery levels to ColorOS's own earphone battery channel (the one AirPods and partner earbuds use) and to the standard Android battery level, so the status bar, Bluetooth settings, and My Devices can read them.
+- **Quick Device Connect popup** now covers every supported model instead of FreeClip only, with the model's bundled image when no cached official image exists.
+- **My Devices (ColorOS 17)**: supports the new preference-based detail page; its Bluetooth settings entry shows HuaweiPods battery and settings and opens the module popup.
+- **Quick Device Connect (ColorOS 17)**: follows the renamed card data class and close method in 17.6.x so the card is not dismissed immediately.
+- Bluetooth-process hooks, Live Alerts, and system settings intents were checked against ColorOS 17 firmware and remain compatible.
+- **LSPosed API 102**: the release build now uses the upstream API 102 entry. On API 102 frameworks such as Vector, installing an update hot-reloads the hooks without restarting each scope; frameworks that only provide API 101 still load the module, just without hot reload.
+
+## ColorOS startup and Live Alerts
 
 Enable HuaweiPods ColorOS in the system auto-launch settings. Under App info → Battery management, allow all background activity (this may increase battery usage). Grant Bluetooth and notification permissions, enable Live Alerts, and open the app once after installation. Recheck these settings after reinstalling.
 
-After updating, restart the Bluetooth scope or reboot the phone to load the new module; the headset will briefly disconnect. Version 1.8.1-coloros.3 fixes false module-service timeouts caused by heartbeat broadcasts omitting sender identity, retaining the Android 16.0 Live Alert fix from 1.8.1-coloros.2.
+After updating, restart the Bluetooth scope or reboot the phone to load the new module; the headset will briefly disconnect.
 
-Verified on 2026-09-08 with OnePlus PLK110, `PLK110_16.0.10.500(CN01)`, Android 16 (API 36), and HUAWEI FreeClip: module-service status and Live Alerts work; after terminating the app process and restarting Bluetooth, reconnecting the headset restores the Live Alert without opening the app. Recovery after a full phone reboot has not been tested.
+ColorOS 16 was verified on 2026-09-08 (1.8.1-coloros.3) with OnePlus PLK110, `PLK110_16.0.10.500(CN01)`, Android 16 (API 36), and HUAWEI FreeClip: module-service status and Live Alerts work; after terminating the app process and restarting Bluetooth, reconnecting the headset restores the Live Alert without opening the app. Recovery after a full phone reboot has not been tested.
 
 Versions from 1.8.1-coloros.2 use a stable release key and support in-place updates. Earlier builds signed with the old key require reinstalling, which clears local app data; save your settings first.
 
@@ -76,7 +86,7 @@ The table lists currently integrated capabilities. Unlisted official features sh
 
 - Xiaomi / Redmi HyperOS or OPPO / OnePlus / realme ColorOS device.
 - Android 15+.
-- LSPosed API version >= 102 (the protocol-capture Debug build uses API 101).
+- LSPosed API version >= 101 (API 102 frameworks additionally hot-reload updates).
 - A paired device listed in the support table above.
 
 ## Usage

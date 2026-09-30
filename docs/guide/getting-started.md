@@ -15,7 +15,7 @@ HuaweiPods 需要正常工作的 LSPosed 环境，并会修改系统蓝牙相关
 
 - 小米或 Redmi 设备，运行 HyperOS；
 - Android 15 或更高版本；
-- 正式版需要 LSPosed API 102 或更高；协议采集 Debug 版沿用 API 101；
+- LSPosed API 101 或更高（API 102 框架支持覆盖安装后自动热重载）；
 - 已在系统蓝牙中配对[支持列表](../support/index.md)中的设备。
 
 ## 1. 安装 HuaweiPods

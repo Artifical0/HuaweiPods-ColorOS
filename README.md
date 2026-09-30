@@ -20,22 +20,32 @@
 
 </div>
 
-HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipods.coloros` 的 Android 15+ Xposed 模块，不会被原版 HuaweiPods 的 LSPosed 商店条目覆盖更新。HyperOS 已接入系统蓝牙详情页、连接弹窗、超级岛与融合设备中心；ColorOS 已接入官方“快速设备连接”弹窗、“我的设备”耳机详情入口及 Android 16 流体云电量卡片。
+HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipods.coloros` 的 Android 15+ Xposed 模块，不会被原版 HuaweiPods 的 LSPosed 商店条目覆盖更新。ColorOS 已接入官方“快速设备连接”弹窗、“我的设备”耳机详情入口、系统耳机电量通道及 Android 16+ 流体云电量卡片；HyperOS 保留上游的系统蓝牙详情页、连接弹窗、超级岛与融合设备中心集成。
 
-> ColorOS 说明：已针对 OnePlus PLK110（ColorOS 16.1、`com.heytap.mydevices` 17.4.15）接入“我的设备”详情入口，目前仍不是完整的 ColorOS 系统面板。私有宿主会随系统更新变化，其他版本可能仅保留模块内电量和通用蓝牙详情页。
+> ColorOS 说明：“我的设备”入口已适配 ColorOS 16.1（`com.heytap.mydevices` 17.4.15）与 ColorOS 17（17.25.10）两代详情页。ColorOS 17 部分目前依据 OnePlus PLK110 `PLK110_17.0.0.102(CN01)` 固件静态核对，尚待实机验证。私有宿主会随系统更新变化，未知版本会退回系统原样，仍保留模块内电量、流体云和通用蓝牙详情页。
 
 连接手机并启用 USB 调试后，可在 Windows PowerShell 运行 `./tools/capture-coloros-environment.ps1`，生成不含日志、账号和蓝牙地址的宿主环境包，供下一阶段适配使用。
 
 > 当前统一版已集成下列 16 个型号，所有型号使用同一个 APK，不再按型号单独分发测试包。
 
-## ColorOS 流体云、自启动与模块状态（1.8.1-coloros.3）
+## ColorOS 17 适配与原生系统集成（1.8.3-coloros.1）
+
+- 同步上游 HuaweiPods 1.8.3：新增 HUAWEI FreeBuds SE 4 ANC，修复模块弹窗中低时延设置写入成功后未保存，并包含 1.7.x～1.8.x 的协议、界面与稳定性更新。
+- **系统耳机电量**：蓝牙进程把华为耳机的左右耳 / 充电盒电量写入 ColorOS 自有的耳机电量通道（与 AirPods、三方耳机相同），并同步 Android 标准电量。状态栏耳机电量、蓝牙设置和“我的设备”等系统界面可以直接读取。
+- **快速设备连接弹窗**：官方弹窗从仅 FreeClip 扩展到所有已支持型号；没有缓存官方图时使用对应机型的内置图。
+- **我的设备（ColorOS 17）**：适配改为 Preference 页面的新版详情页，原“蓝牙设置”入口改为显示 HuaweiPods 电量与设置，点击打开模块弹窗。
+- **快速设备连接（ColorOS 17）**：适配 17.6.x 改名后的卡片数据类与关闭方法，卡片不会被系统立即自动收起。
+- 蓝牙进程 Hook、流体云实时通知、系统设置入口已对照 ColorOS 17 固件核对，签名与行为保持兼容。
+- **LSPosed API 102**：正式版改用上游的 API 102 入口，在 API 102 框架（如 Vector）上覆盖安装新版后自动热重载，无需逐个重启作用域；只支持 API 101 的框架仍可正常加载，只是没有热重载。
+
+## ColorOS 流体云、自启动与模块状态
 
 - 在系统“自启动”页面开启 **HuaweiPods ColorOS**；在“应用详情 → 耗电管理”选择 **完全允许后台行为**。这可能增加后台耗电。重装后需重新检查这些设置。
 - 允许蓝牙与通知权限，并开启系统通知设置中的“实时通知 / 流体云”。首次安装后打开应用一次，再连接耳机。
 - 更新后重启蓝牙作用域，或重启手机，让蓝牙进程加载新版模块；期间耳机会短暂断连。
-- 本版修复心跳广播缺少发送方身份导致的“模块服务超时”误报；1.8.1-coloros.2 已修复 Android 16.0 的流体云请求兼容问题。若流体云只在手动打开应用后恢复，请先检查上述自启动和后台权限。
-- **实测范围（2026-09-08）**：OnePlus PLK110、`PLK110_16.0.10.500(CN01)`、Android 16（API 36）、HUAWEI FreeClip。已确认模块服务连接正常、流体云可见；模拟应用进程被回收并重启蓝牙后，耳机重连可自动恢复流体云，无需打开应用。尚未验证整机重启后的自动恢复。
-- 从 **1.8.1-coloros.2** 起使用固定发布签名，本版可直接覆盖该版本。更早的旧签名版本首次迁移需要卸载重装，会清除本地数据，请先保存设置。
+- 若流体云只在手动打开应用后恢复，请先检查上述自启动和后台权限。
+- **ColorOS 16 实测范围（2026-09-08，1.8.1-coloros.3）**：OnePlus PLK110、`PLK110_16.0.10.500(CN01)`、Android 16（API 36）、HUAWEI FreeClip。已确认模块服务连接正常、流体云可见；模拟应用进程被回收并重启蓝牙后，耳机重连可自动恢复流体云，无需打开应用。尚未验证整机重启后的自动恢复。
+- 从 **1.8.1-coloros.2** 起使用固定发布签名，之后的版本可直接覆盖安装。更早的旧签名版本首次迁移需要卸载重装，会清除本地数据，请先保存设置。
 
 ## 支持型号
 
@@ -82,7 +92,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 
 - 小米 / Redmi HyperOS，或 OPPO / OnePlus / realme ColorOS 设备
 - Android 15 及以上
-- LSPosed API 101 及以上
+- LSPosed API 101 及以上（API 102 框架额外支持覆盖安装后自动热重载）
 - 表中任一已集成型号
 
 ## 快速开始
@@ -116,14 +126,14 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 ## 构建
 
 ```bash
-# 正式版（LSPosed API 102）
+# 正式版（按 LSPosed API 102 构建，兼容 101）
 ./gradlew :app:assembleRelease
 
 # 协议采集与调试版（LSPosed API 101，包含采集界面）
 ./gradlew :app:assembleDebug
 ```
 
-`release` 的图片识别不依赖华为智慧音频；仅在智慧音频本来就在运行时，注入一个 FreeClip 2 空间音频同步桥，不会主动启动或保活它，并使用 LSPosed API 102（含自动热重载元数据）。`debug` 仍固定使用 API 101，另外包含面向适配工作的智慧音频协议采集功能。两者使用相同应用 ID，无法同时安装。
+`release` 的图片识别不依赖华为智慧音频；仅在智慧音频本来就在运行时，注入一个 FreeClip 2 空间音频同步桥，不会主动启动或保活它。`release` 按 API 102 构建并携带自动热重载元数据，运行时兼容 API 101 框架；`debug` 固定使用 API 101，另外包含面向适配工作的智慧音频协议采集功能。两者使用相同应用 ID，无法同时安装。
 
 ## 致谢
 
