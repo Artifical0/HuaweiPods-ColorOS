@@ -13,8 +13,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import java.lang.reflect.Method
+import java.lang.reflect.Modifier
 import java.util.Locale
 import java.util.WeakHashMap
+import java.util.concurrent.ConcurrentHashMap
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.pods.displayName
 import moe.chenxy.huaweipods.pods.isSupported
@@ -23,42 +26,120 @@ import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 
 /**
- * ColorOS 16 "My Devices" integration, verified against com.heytap.mydevices 17.4.15.
+ * ColorOS "My Devices" integration.
  *
- * The vendor page already owns Bluetooth permissions and a stable system-styled settings row.
- * Reusing that row for supported Huawei devices avoids adding views with private COUI resources.
- * All reflection is guarded so a future My Devices update degrades to its stock behaviour.
+ * - ColorOS 16.1（com.heytap.mydevices 17.4.15）：ViewBinding 详情页，复用 `row_bt_setting` 行。
+ * - ColorOS 17（com.heytap.mydevices 17.25.10）：详情页改为 Preference 页面，复用
+ *   `pref_bt_audio_settings`（打开系统蓝牙设备设置）这一项。
+ *
+ * 两代页面都只改写系统已有的入口，不新增依赖 COUI 私有资源的 View。17.x 的 androidx 类成员
+ * 均被混淆，因此按类型结构定位绑定方法，并通过 `android.R.id.title/summary` 修改文字。
+ * 所有反射都有兜底，未知版本保持系统原样。
  */
 object ColorOsMyDevicesHook : HookContext() {
     private const val TAG = "HuaweiPods-ColorOsMyDevices"
-    private const val DETAIL_FRAGMENT =
+    private const val LEGACY_DETAIL_FRAGMENT =
         "com.oplus.mydevices.bluetooth.fragment.BtDetailPageFragment"
+    private const val PREFERENCE_DETAIL_FRAGMENT =
+        "com.heytap.mydevices.plugin.bluetooth.fragment.BtDetailPageFragment"
+    private const val PREFERENCE_CLASS = "androidx.preference.Preference"
+    private const val SETTINGS_PREFERENCE_KEY = "pref_bt_audio_settings"
     private const val BLUETOOTH_PACKAGE = "com.android.bluetooth"
-    private var statusReceiverRegistered = false
-    private val activeRows = WeakHashMap<LinearLayout, ColorOsHeadsetRow>()
+    private val bluetoothAddressPattern = Regex("^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+    private var statusReceiverContext: Context? = null
+    private var statusReceiver: BroadcastReceiver? = null
+    private val activeRows = WeakHashMap<View, ColorOsHeadsetRow>()
+    private val preferenceRows = WeakHashMap<Any, ColorOsHeadsetRow>()
+    private val latestSummaries = ConcurrentHashMap<String, String>()
+    private val hookedBindMethods = ConcurrentHashMap.newKeySet<Method>()
 
     override fun onHook() {
-        runCatching {
-            val method = findMethod(
-                DETAIL_FRAGMENT,
-                "onViewCreated",
-                View::class.java,
-                Bundle::class.java,
+        val legacy = runCatching { hookLegacyDetailPage() }
+        val preference = runCatching { hookPreferenceDetailPage() }
+        if (legacy.isSuccess) Log.i(TAG, "My Devices 16.x detail hook installed")
+        if (preference.isSuccess) Log.i(TAG, "My Devices 17.x preference detail hook installed")
+        if (legacy.isFailure && preference.isFailure) {
+            Log.w(
+                TAG,
+                "Unsupported My Devices build; leaving the stock page unchanged",
+                preference.exceptionOrNull() ?: legacy.exceptionOrNull()!!,
             )
-            hookAfter(method) {
-                val fragment = instance ?: return@hookAfter
-                val root = args.firstOrNull() as? View ?: return@hookAfter
-                runCatching { attachHuaweiPodsEntry(fragment, root) }
-                    .onFailure { Log.w(TAG, "Unable to attach HuaweiPods entry", it) }
-            }
-            Log.i(TAG, "My Devices detail hook installed")
-        }.onFailure {
-            Log.w(TAG, "Unsupported My Devices build; leaving the stock page unchanged", it)
+        }
+    }
+
+    override fun onClose() {
+        hookedBindMethods.clear()
+        val receiver = statusReceiver
+        val context = statusReceiverContext
+        if (receiver != null && context != null) {
+            runCatching { context.unregisterReceiver(receiver) }
+        }
+        statusReceiver = null
+        statusReceiverContext = null
+        synchronized(activeRows) { activeRows.clear() }
+        synchronized(preferenceRows) { preferenceRows.clear() }
+        latestSummaries.clear()
+    }
+
+    private fun hookLegacyDetailPage() {
+        val method = findMethod(
+            LEGACY_DETAIL_FRAGMENT,
+            "onViewCreated",
+            View::class.java,
+            Bundle::class.java,
+        )
+        hookAfter(method) {
+            val fragment = instance ?: return@hookAfter
+            val root = args.firstOrNull() as? View ?: return@hookAfter
+            runCatching { attachLegacyEntry(fragment, root) }
+                .onFailure { Log.w(TAG, "Unable to attach HuaweiPods entry", it) }
+        }
+    }
+
+    private fun hookPreferenceDetailPage() {
+        val bindMethods = preferenceBindMethods(findClass(PREFERENCE_CLASS))
+        check(bindMethods.isNotEmpty()) { "Preference bind method not found" }
+        val onViewCreated = findMethod(
+            PREFERENCE_DETAIL_FRAGMENT,
+            "onViewCreated",
+            View::class.java,
+            Bundle::class.java,
+        )
+        hookAfter(onViewCreated) {
+            val fragment = instance ?: return@hookAfter
+            val root = args.firstOrNull() as? View ?: return@hookAfter
+            runCatching { attachPreferenceEntry(fragment, root) }
+                .onFailure { Log.w(TAG, "Unable to attach HuaweiPods preference entry", it) }
+        }
+        bindMethods.forEach(::hookPreferenceBind)
+    }
+
+    /**
+     * COUIPreference 等子类会重写绑定方法并在 super 之后继续设置标题/摘要。沿目标 Preference 的
+     * 类链逐层 Hook，最外层重写的 after 回调最后执行，保证入口文字不被子类覆盖。
+     */
+    private fun hookPreferenceBindChain(preferenceClass: Class<*>) {
+        var type: Class<*>? = preferenceClass
+        while (type != null && type != Any::class.java) {
+            preferenceBindMethods(type).forEach(::hookPreferenceBind)
+            if (type.name == PREFERENCE_CLASS) break
+            type = type.superclass
+        }
+    }
+
+    private fun hookPreferenceBind(method: Method) {
+        if (!hookedBindMethods.add(method)) return
+        hookAfter(method) {
+            val preference = instance ?: return@hookAfter
+            val holder = args.firstOrNull() ?: return@hookAfter
+            runCatching { onPreferenceBound(preference, holder) }
+                .onFailure { Log.w(TAG, "Unable to update bound HuaweiPods entry", it) }
         }
     }
 
     @SuppressLint("MissingPermission")
-    private fun attachHuaweiPodsEntry(fragment: Any, root: View) {
+    private fun attachLegacyEntry(fragment: Any, root: View) {
         val address = getObjectField(fragment, "mMac") as? String
         val viewModel = getObjectField(fragment, "viewModel")
         val device = bluetoothDevice(address)
@@ -68,15 +149,16 @@ object ColorOsMyDevicesHook : HookContext() {
         val route = resolveHuaweiDeviceRoute(address, deviceName)
         if (!route.isSupported || device == null) return
 
-        val row = settingsRow(fragment, root) ?: run {
+        val row = legacySettingsRow(fragment, root) ?: run {
             Log.w(TAG, "Huawei device found but row_bt_setting is unavailable")
             return
         }
-        activeRows[row] = ColorOsHeadsetRow(
+        val entry = ColorOsHeadsetRow(
             address = device.address.uppercase(),
             deviceName = route.displayName,
         )
-        customizeRow(row, route.displayName)
+        synchronized(activeRows) { activeRows[row] = entry }
+        customizeRow(row, entry.deviceName, latestSummaries[entry.address])
         row.setOnClickListener {
             launchHuaweiPods(row.context, device)
         }
@@ -85,7 +167,48 @@ object ColorOsMyDevicesHook : HookContext() {
         Log.i(TAG, "Attached entry for ${route.displayName}")
     }
 
-    private fun settingsRow(fragment: Any, root: View): LinearLayout? {
+    @SuppressLint("MissingPermission")
+    private fun attachPreferenceEntry(fragment: Any, root: View) {
+        val address = preferenceFragmentAddress(fragment) ?: return
+        val device = bluetoothDevice(address) ?: return
+        val deviceName = runCatching { device.alias ?: device.name }.getOrNull()
+        val route = resolveHuaweiDeviceRoute(address, deviceName)
+        if (!route.isSupported) return
+
+        val preference = runCatching {
+            callMethod(fragment, "findPreference", SETTINGS_PREFERENCE_KEY)
+        }.getOrNull() ?: run {
+            Log.w(TAG, "Huawei device found but $SETTINGS_PREFERENCE_KEY is unavailable")
+            return
+        }
+        runCatching { hookPreferenceBindChain(preference.javaClass) }
+            .onFailure { Log.w(TAG, "Unable to hook ${preference.javaClass.name} binding", it) }
+        synchronized(preferenceRows) {
+            preferenceRows[preference] = ColorOsHeadsetRow(
+                address = device.address.uppercase(),
+                deviceName = route.displayName,
+            )
+        }
+        registerStatusReceiver(root.context)
+        requestCurrentStatus(root.context)
+        Log.i(TAG, "Attached preference entry for ${route.displayName}")
+    }
+
+    private fun onPreferenceBound(preference: Any, holder: Any) {
+        val itemView = getObjectField(holder, "itemView") as? View ?: return
+        val entry = synchronized(preferenceRows) { preferenceRows[preference] }
+        if (entry == null) {
+            // RecyclerView 复用了原来承载 HuaweiPods 入口的 View；系统绑定已恢复其文字和点击。
+            synchronized(activeRows) { activeRows.remove(itemView) }
+            return
+        }
+        synchronized(activeRows) { activeRows[itemView] = entry }
+        customizeRow(itemView, entry.deviceName, latestSummaries[entry.address])
+        val device = bluetoothDevice(entry.address) ?: return
+        itemView.setOnClickListener { launchHuaweiPods(it.context, device) }
+    }
+
+    private fun legacySettingsRow(fragment: Any, root: View): LinearLayout? {
         val bindingRow = runCatching {
             val binding = getObjectField(fragment, "_binding")
             getObjectField(binding, "h") as? LinearLayout
@@ -96,62 +219,96 @@ object ColorOsMyDevicesHook : HookContext() {
         return rowId.takeIf { it != 0 }?.let(root::findViewById)
     }
 
-    private fun customizeRow(row: LinearLayout, deviceName: String, summary: String? = null) {
+    /** 17.x 详情页只有一个保存 MAC 的 String 字段；按取值校验，不依赖混淆后的字段名。 */
+    private fun preferenceFragmentAddress(fragment: Any): String? {
+        var type: Class<*>? = fragment.javaClass
+        while (type != null && type != Any::class.java) {
+            type.declaredFields
+                .filter { it.type == String::class.java && !Modifier.isStatic(it.modifiers) }
+                .forEach { field ->
+                    val value = runCatching {
+                        field.isAccessible = true
+                        field.get(fragment) as? String
+                    }.getOrNull()
+                    if (value != null && bluetoothAddressPattern.matches(value)) return value
+                }
+            type = type.superclass
+        }
+        return null
+    }
+
+    private fun customizeRow(row: View, deviceName: String, summary: String? = null) {
         row.isEnabled = true
         row.alpha = 1f
         row.contentDescription = "HuaweiPods, $deviceName"
+        val summaryText = summary ?: if (
+            Locale.getDefault().language == Locale.CHINESE.language
+        ) {
+            "$deviceName 电量与设置"
+        } else {
+            "$deviceName battery and settings"
+        }
+        val title = row.findViewById<TextView>(android.R.id.title)
+        val summaryView = row.findViewById<TextView>(android.R.id.summary)
+        if (title != null) {
+            title.text = "HuaweiPods"
+            summaryView?.apply {
+                text = summaryText
+                visibility = View.VISIBLE
+            }
+            return
+        }
         val labels = collectTextViews(row)
         when (labels.size) {
             0 -> Unit
             1 -> labels[0].text = "HuaweiPods · $deviceName"
             else -> {
                 labels[0].text = "HuaweiPods"
-                labels[1].text = summary ?: if (
-                    Locale.getDefault().language == Locale.CHINESE.language
-                ) {
-                    "$deviceName 电量与设置"
-                } else {
-                    "$deviceName battery and settings"
-                }
+                labels[1].text = summaryText
             }
         }
     }
 
     private fun registerStatusReceiver(context: Context) {
-        if (statusReceiverRegistered) return
-        val registered = runCatching {
-            context.applicationContext.registerReceiver(
-                object : BroadcastReceiver() {
-                    override fun onReceive(context: Context?, intent: Intent?) {
-                        val received = intent ?: return
-                        if (
-                            HuaweiPodsAction.canonical(received.action) !=
-                            HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED
-                        ) return
-                        val address = received.getStringExtra("address")?.uppercase() ?: return
-                        val summary = colorOsBatterySummary(
-                            leftBattery = received.getIntExtra("left_battery", 0),
-                            leftConnected = received.getBooleanExtra("left_connected", false),
-                            rightBattery = received.getIntExtra("right_battery", 0),
-                            rightConnected = received.getBooleanExtra("right_connected", false),
-                            caseBattery = received.getIntExtra("case_battery", 0),
-                            caseConnected = received.getBooleanExtra("case_connected", false),
-                            chinese = Locale.getDefault().language == Locale.CHINESE.language,
-                        ) ?: return
-                        activeRows.entries
-                            .filter { (row, entry) -> row.isAttachedToWindow && entry.address == address }
-                            .forEach { (row, entry) -> customizeRow(row, entry.deviceName, summary) }
-                    }
-                },
+        if (statusReceiver != null) return
+        val appContext = context.applicationContext ?: context
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val received = intent ?: return
+                if (
+                    HuaweiPodsAction.canonical(received.action) !=
+                    HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED
+                ) return
+                val address = received.getStringExtra("address")?.uppercase() ?: return
+                val summary = colorOsBatterySummary(
+                    leftBattery = received.getIntExtra("left_battery", 0),
+                    leftConnected = received.getBooleanExtra("left_connected", false),
+                    rightBattery = received.getIntExtra("right_battery", 0),
+                    rightConnected = received.getBooleanExtra("right_connected", false),
+                    caseBattery = received.getIntExtra("case_battery", 0),
+                    caseConnected = received.getBooleanExtra("case_connected", false),
+                    chinese = Locale.getDefault().language == Locale.CHINESE.language,
+                ) ?: return
+                latestSummaries[address] = summary
+                synchronized(activeRows) { activeRows.entries.toList() }
+                    .filter { (row, entry) -> row.isAttachedToWindow && entry.address == address }
+                    .forEach { (row, entry) -> customizeRow(row, entry.deviceName, summary) }
+            }
+        }
+        runCatching {
+            appContext.registerReceiver(
+                receiver,
                 IntentFilter().apply {
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED)
                 },
                 Context.RECEIVER_EXPORTED,
             )
+        }.onSuccess {
+            statusReceiver = receiver
+            statusReceiverContext = appContext
         }.onFailure {
             Log.w(TAG, "Unable to register My Devices battery receiver", it)
-        }.isSuccess
-        if (registered) statusReceiverRegistered = true
+        }
     }
 
     private fun requestCurrentStatus(context: Context) {
@@ -200,6 +357,34 @@ object ColorOsMyDevicesHook : HookContext() {
                 }.onFailure { Log.e(TAG, "Unable to open HuaweiPods", it) }
             }
     }
+}
+
+/**
+ * androidx `Preference.onBindViewHolder(PreferenceViewHolder)` 在厂商应用里会被 R8 改名；
+ * 它是 Preference 上唯一接收 RecyclerView.ViewHolder 子类的实例方法，按结构定位。
+ */
+internal fun preferenceBindMethods(preferenceClass: Class<*>): List<Method> =
+    preferenceClass.declaredMethods.filter { method ->
+        !Modifier.isStatic(method.modifiers) &&
+            method.returnType == Void.TYPE &&
+            method.parameterTypes.size == 1 &&
+            isRecyclerViewHolderType(method.parameterTypes[0])
+    }.onEach { it.isAccessible = true }
+
+private fun isRecyclerViewHolderType(type: Class<*>): Boolean {
+    var current: Class<*>? = type
+    while (current != null && current != Any::class.java) {
+        if (
+            current.name.startsWith("androidx.recyclerview.widget.RecyclerView$") &&
+            current.declaredFields.any { field ->
+                field.name == "itemView" && View::class.java.isAssignableFrom(field.type)
+            }
+        ) {
+            return true
+        }
+        current = current.superclass
+    }
+    return false
 }
 
 private data class ColorOsHeadsetRow(
