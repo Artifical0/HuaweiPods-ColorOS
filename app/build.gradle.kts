@@ -21,7 +21,7 @@ android {
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 17
-        versionName = "1.8.3-coloros.1"
+        versionName = "1.8.3-coloros.1-rc1"
         buildConfigField("long", "BUILD_TIMESTAMP", moduleBuildTimestamp.toString())
     }
 
