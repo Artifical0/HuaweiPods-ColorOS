@@ -37,7 +37,9 @@ import moe.chenxy.huaweipods.config.PodImagePrefs
 import moe.chenxy.huaweipods.config.PodImageResource
 import moe.chenxy.huaweipods.config.preferredImagePath
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.displayName
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
+import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.pods.supportsAnc
 import moe.chenxy.huaweipods.platform.RomFamily
 import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
@@ -547,18 +549,28 @@ object MiBluetoothToastHook : HookContext() {
             }
 
             val moduleResources = ModuleResourceResolver.resources(context)
-            val deviceName = runCatching {
+            val bluetoothName = runCatching {
                 bluetoothDevice.alias?.takeIf(String::isNotBlank)
                     ?: bluetoothDevice.name?.takeIf(String::isNotBlank)
-            }.getOrNull() ?: "Huawei FreeClip"
-            val deviceRoute = DeviceRoutePrefs.resolve(prefs, address, deviceName)
-            val isFreeClip = deviceName.contains("FreeClip", ignoreCase = true) ||
-                deviceRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP ||
-                deviceRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP2
-            if (!isFreeClip) {
+            }.getOrNull()
+            val deviceRoute = DeviceRoutePrefs.resolve(prefs, address, bluetoothName)
+            if (!deviceRoute.isSupported) {
                 createPodsHeadsUpNotification(address, context, batteryParams)
                 officialPopupShownAddresses.add(address)
                 return
+            }
+            val deviceName = bluetoothName ?: deviceRoute.displayName
+            // 缓存官方图缺失时，快速设备连接进程按该资源名加载机型内置图，而不是固定用 FreeClip 图。
+            val fallbackDrawableName = moduleResources?.let { resources ->
+                runCatching {
+                    resources.getResourceEntryName(
+                        PodImageLoader.modelFallbackResId(
+                            deviceRoute,
+                            PodImageResource.BOX,
+                            R.drawable.img_box,
+                        ),
+                    )
+                }.getOrNull()
             }
             val batteryText = buildList {
                 batteryParams.left?.takeIf { it.isConnected }?.let {
@@ -584,9 +596,10 @@ object MiBluetoothToastHook : HookContext() {
                     deviceName = deviceName,
                     batteryText = batteryText,
                     imageFileName = imageFileName,
+                    fallbackDrawableName = fallbackDrawableName,
                 )
             ) {
-                Log.i("HuaweiPods", "ColorOS official accessory popup requested")
+                Log.i("HuaweiPods", "ColorOS official accessory popup requested route=$deviceRoute")
             } else {
                 createPodsHeadsUpNotification(address, context, batteryParams)
             }
