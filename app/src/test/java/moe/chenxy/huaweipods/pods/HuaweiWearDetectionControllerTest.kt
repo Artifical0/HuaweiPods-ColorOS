@@ -46,12 +46,6 @@ class HuaweiWearDetectionControllerTest {
                 HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4,
             ),
         )
-        assertNull(
-            HuaweiWearDetectionController.setPacket(
-                HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4,
-                true,
-            ),
-        )
     }
 
     @Test

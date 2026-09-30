@@ -8,13 +8,16 @@ import android.content.IntentFilter
 import java.lang.reflect.Proxy
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import moe.chenxy.huaweipods.pods.FreeClip2SoundEffect
 import moe.chenxy.huaweipods.pods.FreeClip2SpatialAudioMode
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerCodec
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerPreset
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerState
 import moe.chenxy.huaweipods.pods.SmartAudioFreeClip2BridgePolicy
+import moe.chenxy.huaweipods.pods.putHuaweiEqualizerCustomPresets
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 
@@ -31,10 +34,20 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
     private val executor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "HuaweiPods-smartaudio-spatial").apply { isDaemon = true }
     }
+    private val inFlightAsyncResults = AtomicInteger(0)
     @Volatile
     private var eqService: Any? = null
     @Volatile
     private var eqListener: Any? = null
+    @Volatile
+    private var receiverContext: Context? = null
+
+    override fun onCanClose(): Boolean {
+        if (inFlightAsyncResults.get() != 0) return false
+        val service = eqService
+        val listener = eqListener
+        return listener == null || (service != null && findEqUnregisterMethod(service) != null)
+    }
 
     override fun onHook() {
         if (!installed.compareAndSet(false, true)) return
@@ -42,6 +55,55 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
         resolveApplicationContext()?.let(::registerReceiver)
             ?: hookApplicationAttach()
         Log.i(TAG, "Passive FreeClip 2 spatial/EQ bridge enabled")
+    }
+
+    override fun onClose() {
+        val cleanupFailures = mutableListOf<Throwable>()
+        val context = receiverContext
+        if (context != null && receiverRegistered.get()) {
+            runCatching { context.unregisterReceiver(requestReceiver) }
+                .onFailure { error ->
+                    if (error !is IllegalArgumentException) {
+                        Log.w(TAG, "Unable to unregister FreeClip 2 spatial bridge", error)
+                    }
+                }
+        }
+        receiverContext = null
+        receiverRegistered.set(false)
+
+        val service = eqService
+        val listener = eqListener
+        if (service != null && listener != null) {
+            runCatching {
+                val unregister = checkNotNull(findEqUnregisterMethod(service)) {
+                    "Official EQ listener has no unregister method"
+                }
+                unregister.isAccessible = true
+                if (unregister.parameterTypes.size == 2) {
+                    unregister.invoke(service, "HuaweiPodsFreeClip2Bridge", listener)
+                } else {
+                    unregister.invoke(service, listener)
+                }
+            }.onFailure {
+                cleanupFailures += it
+                Log.w(TAG, "Unable to unregister official EQ listener", it)
+            }
+        }
+        eqListener = null
+        eqService = null
+        executor.shutdownNow()
+        val executorStopped = runCatching { executor.awaitTermination(1, TimeUnit.SECONDS) }
+            .onFailure(cleanupFailures::add)
+            .getOrDefault(false)
+        if (!executorStopped) {
+            cleanupFailures += IllegalStateException("Smart Audio bridge executor did not stop")
+        }
+        installed.set(false)
+        if (cleanupFailures.isNotEmpty()) {
+            throw IllegalStateException("Smart Audio bridge cleanup incomplete").also { failure ->
+                cleanupFailures.forEach(failure::addSuppressed)
+            }
+        }
     }
 
     /**
@@ -121,6 +183,7 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
                                 gains.toIntArray(),
                             )
                         }
+                        putHuaweiEqualizerCustomPresets(it.customPresets)
                     }
                     setPackage(SmartAudioFreeClip2BridgePolicy.BLUETOOTH_PACKAGE)
                     addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
@@ -159,6 +222,7 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
                 },
                 Context.RECEIVER_EXPORTED,
             )
+            receiverContext = context
         }.onFailure {
             receiverRegistered.set(false)
             Log.w(TAG, "Unable to register FreeClip 2 spatial bridge", it)
@@ -169,12 +233,13 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val appContext = context?.applicationContext ?: return
             val request = intent ?: return
+            val requesterPackage = sentFromPackage ?: return
             val trustedSender = if (
                 request.action == HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_EQ_SET
             ) {
-                SmartAudioFreeClip2BridgePolicy.isTrustedEqualizerRequestSender(sentFromPackage)
+                SmartAudioFreeClip2BridgePolicy.isTrustedEqualizerRequestSender(requesterPackage)
             } else {
-                SmartAudioFreeClip2BridgePolicy.isTrustedRequestSender(sentFromPackage)
+                SmartAudioFreeClip2BridgePolicy.isTrustedRequestSender(requesterPackage)
             }
             if (!trustedSender) {
                 Log.w(TAG, "Rejected untrusted FreeClip 2 spatial request")
@@ -206,14 +271,22 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
                         it.size == HuaweiEqualizerCodec.BAND_COUNT &&
                             it.all { gain -> gain in HuaweiEqualizerCodec.GAIN_RANGE }
                     } ?: return
-                handleEqualizerSetRequest(appContext, nonce, address, presetId, name, gains)
+                handleEqualizerSetRequest(
+                    appContext,
+                    nonce,
+                    address,
+                    presetId,
+                    name,
+                    gains,
+                    requesterPackage,
+                )
                 return
             }
             val mode = FreeClip2SpatialAudioMode.fromProtocolValue(
                 request.getIntExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_MODE, -1),
             ) ?: return
             val pendingResult = goAsync()
-            executor.execute {
+            executeAsync(pendingResult) {
                 val result = runCatching { setSpatialMode(address, mode) }
                     .onFailure { Log.w(TAG, "Official FreeClip 2 spatial write failed", it) }
                     .getOrDefault(BridgeResult(false))
@@ -229,7 +302,6 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
                         },
                     )
                 }.onFailure { Log.w(TAG, "Unable to return FreeClip 2 spatial result", it) }
-                pendingResult.finish()
             }
         }
     }
@@ -241,9 +313,10 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
         presetId: Int,
         name: String,
         gains: List<Int>,
+        requesterPackage: String,
     ) {
         val pendingResult = requestReceiver.goAsync()
-        executor.execute {
+        executeAsync(pendingResult) {
             val accepted = runCatching {
                 setOfficialEqualizer(address, presetId, name, gains)
             }.onFailure { Log.w(TAG, "Official FreeClip 2 equalizer write failed", it) }
@@ -254,12 +327,11 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
                         putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_NONCE, nonce)
                         putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_ADDRESS, address)
                         putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_ACCEPTED, accepted)
-                        setPackage(SmartAudioFreeClip2BridgePolicy.MODULE_PACKAGE)
+                        setPackage(requesterPackage)
                         addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                     },
                 )
             }.onFailure { Log.w(TAG, "Unable to return FreeClip 2 equalizer result", it) }
-            pendingResult.finish()
         }
     }
 
@@ -302,7 +374,7 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
         address: String,
     ) {
         val pendingResult = requestReceiver.goAsync()
-        executor.execute {
+        executeAsync(pendingResult) {
             val accepted = runCatching { queryOfficialAudioState(address) }
                 .onFailure { Log.w(TAG, "Official FreeClip 2 state query failed", it) }
                 .getOrDefault(false)
@@ -317,7 +389,27 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
                     },
                 )
             }.onFailure { Log.w(TAG, "Unable to return FreeClip 2 query result", it) }
-            pendingResult.finish()
+        }
+    }
+
+    private fun executeAsync(
+        pendingResult: BroadcastReceiver.PendingResult,
+        block: () -> Unit,
+    ) {
+        inFlightAsyncResults.incrementAndGet()
+        runCatching {
+            executor.execute {
+                try {
+                    block()
+                } finally {
+                    runCatching(pendingResult::finish)
+                    inFlightAsyncResults.decrementAndGet()
+                }
+            }
+        }.onFailure {
+            runCatching(pendingResult::finish)
+            inFlightAsyncResults.decrementAndGet()
+            throw it
         }
     }
 
@@ -393,6 +485,11 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
         eqListener = listener
         eqService = service
         return service
+    }
+
+    private fun findEqUnregisterMethod(service: Any) = service.javaClass.methods.firstOrNull { method ->
+        method.name.equals("unregisterEqChangeListener", ignoreCase = true) &&
+            method.parameterTypes.size in 1..2
     }
 
     private fun parseOfficialEqualizerState(

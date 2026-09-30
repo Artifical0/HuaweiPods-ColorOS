@@ -26,7 +26,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 
 连接手机并启用 USB 调试后，可在 Windows PowerShell 运行 `./tools/capture-coloros-environment.ps1`，生成不含日志、账号和蓝牙地址的宿主环境包，供下一阶段适配使用。
 
-> 当前统一版已集成下列 14 个型号，所有型号使用同一个 APK，不再按型号单独分发测试包。
+> 当前统一版已集成下列 16 个型号，所有型号使用同一个 APK，不再按型号单独分发测试包。
 
 ## ColorOS 流体云、自启动与模块状态（1.8.1-coloros.3）
 
@@ -45,6 +45,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 | HUAWEI FreeBuds 4E | 扩展支持 | 电量、降噪 / 关闭与轻度 / 均衡两档降噪、状态回读、左右耳双击与按住、佩戴检测、轻滑音量说明、3 种官方音效和官方配色图片 |
 | HUAWEI FreeBuds 5 | 扩展支持 | 电量、降噪 / 关闭与状态回读、智慧动态 / 轻度 / 均衡三档降噪、佩戴检测、4 种官方音效、高清音质与低时延自动保持；手势设置待补充 |
 | HUAWEI FreeBuds 5i | 扩展支持 | 电量、通透 / 降噪 / 关闭与状态回读、智慧动态 / 轻度 / 均衡 / 深度四档降噪、左右耳双击、佩戴检测、4 种官方音效、高清音质、低时延自动保持与官方配色图片；长按和滑动设置待补充 |
+| HUAWEI FreeBuds SE 4 ANC | 扩展支持 | 电量、通透 / 降噪 / 关闭与状态回读、轻度 / 均衡 / 深度三档降噪、防风噪、4 种官方音效、10 段自定义均衡器、低时延自动保持与官方配色图片；手势设置待补充 |
 | HUAWEI FreeBuds 6i | 扩展支持 | 电量、通透 / 降噪 / 关闭、4 档降噪、通透人声模式、双击 / 三击手势、4 种官方音效、10 段自定义均衡器、低时延自动保持与专属图片 |
 | HUAWEI FreeBuds Pro 3 | 扩展支持 | 电量、三态控制与状态回读、4 档降噪、通透人声模式、长按 / 捏合 / 滑动手势与低时延自动保持 |
 | HUAWEI FreeBuds Pro 4 | 基础支持 | 电量、降噪 / 关闭两态控制；暂不支持降噪状态回读与手势设置 |
@@ -57,7 +58,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 | HUAWEI Eyewear 2 | 基础支持 | 左右镜腿电量、双击 / 滑动手势与低时延自动保持；不提供主动降噪 |
 | HUAWEI Eyewear 3 | 基础支持 | 协议型号识别、左右镜腿电量、系统眼镜分类与官方配色图片；不提供主动降噪 |
 
-“稳定”表示已完成较充分的实机验证；“扩展支持”表示已接入更多协议控制；“基础支持”表示已接入识别、电量或核心控制。除稳定型号外，其余型号仍建议继续进行真机回归。表中未列出的官方功能不代表已经支持。
+表格仅列出当前已接入的能力；未列出的官方功能不代表已经支持，具体表现还会受到耳机固件和 HyperOS 系统组件版本影响。
 
 如需适配其他华为耳机，可提交 Issue 或提供脱敏抓包数据。
 
@@ -68,12 +69,13 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 - 接入 ColorOS 官方耳机连接弹窗；Android 16+ 可在流体云显示左右耳与充电盒电量
 - 可分别控制锁屏耳机通知与超级岛通知
 - 通知可打开模块弹窗、系统设置或华为智慧音频；模块弹窗可直接切换低时延
-- 接入融合设备中心，并支持已配对设备间流转；支持低时延的机型可复用“查找耳机”卡片快速切换
+- 接入融合设备中心，并支持已配对设备间流转；已验证的旧版宿主可复用“查找耳机”卡片快速切换低时延
 - 显示左右耳、充电盒或眼镜左右镜腿电量
 - 按机型提供主动降噪、通透模式、降噪等级和手势设置
 - 直接从蓝牙协议读取现代型号的精确资源身份，并从华为官方 CDN 校验、缓存对应机型与配色图片
 - 耳机名称被修改或无法自动识别时，可按蓝牙地址手动选择型号
 - 首次启动提供设置引导，并可在应用内检查 GitHub 更新
+- 独立的关于页面集中展示版本、更新、反馈与社区入口，完整设置收进右上角入口
 - 覆盖安装新版本后提示重启作用域，无需直接重启手机
 
 ## 使用要求
@@ -91,6 +93,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 
    - ColorOS：`com.android.bluetooth`、`com.heytap.mydevices`、`com.heytap.accessory`（`com.heytap.accessory` 用于系统“快速设备连接”官方弹窗；可选勾选 `com.android.settings`，用于打开通用蓝牙详情页）
    - HyperOS 完整集成：`com.android.bluetooth`、`com.android.settings`、`com.milink.service`、`com.xiaomi.bluetooth`
+   - 可选：`com.huawei.smartaudio`（已安装华为智慧音频时，用于 FreeClip 2 空间音频与自定义音效同步）
 
 4. 在 HuaweiPods 内重启相关作用域，或重启手机。
 5. ColorOS 16+ 首次使用流体云时，在 HuaweiPods 设置中点击“ColorOS 流体云”，并在系统通知设置开启“实时提醒”。
@@ -98,7 +101,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 
 正式版不需要安装或运行华为智慧音频来获取图片：现代型号由蓝牙协议直接确认机型与配色，旧协议型号可在图片设置中检索华为官方配色并手动确认。下载失败时始终回退到已有缓存或内置图，不会猜测默认配色。
 
-融合设备中心低时延卡片可在 HuaweiPods 设置中关闭。由于现有协议没有可靠的低时延状态回读，界面显示最近一次成功写入且会在重连时恢复的设置，不代表耳机主动上报的实时状态。
+融合设备中心低时延卡片只在已验证的旧版宿主中启用，并可在 HuaweiPods 设置中关闭；HyperOS 4 请从模块弹窗或详情页操作。1.8.3 修复了 FreeBuds 6i 等机型在弹窗内写入成功后设置未保存、再次打开又显示关闭的问题。现有协议没有可靠的低时延状态回读，界面显示最近一次成功写入且会在重连时恢复的设置，不代表耳机主动上报的实时状态；耳机端效果仍需实机验证。
 
 更完整的安装说明见 [快速开始](docs/guide/getting-started.md)。
 
@@ -113,23 +116,25 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 ## 构建
 
 ```bash
-# 正式版
+# 正式版（LSPosed API 102）
 ./gradlew :app:assembleRelease
 
-# 协议采集与调试版
+# 协议采集与调试版（LSPosed API 101，包含采集界面）
 ./gradlew :app:assembleDebug
 ```
 
-`release` 的图片识别不依赖华为智慧音频；仅在智慧音频本来就在运行时，注入一个 FreeClip 2 空间音频同步桥，不会主动启动或保活它。`debug` 另外包含面向适配工作的智慧音频协议采集功能。两者使用相同应用 ID，无法同时安装。
+`release` 的图片识别不依赖华为智慧音频；仅在智慧音频本来就在运行时，注入一个 FreeClip 2 空间音频同步桥，不会主动启动或保活它，并使用 LSPosed API 102（含自动热重载元数据）。`debug` 仍固定使用 API 101，另外包含面向适配工作的智慧音频协议采集功能。两者使用相同应用 ID，无法同时安装。
 
 ## 致谢
 
 - [HuaweiPods](https://github.com/Nshpiter/HuaweiPods) by Nshpiter（本适配版的直接上游）
 - [OppoPods](https://github.com/1812z/OppoPods) by 1812z（HuaweiPods 直接基于）
 - [OppoPods](https://github.com/Leaf-lsgtky/OppoPods) by Leaf-lsgtky（上游原始项目）
-- [HyperPods](https://github.com/Art-Chen/HyperPods) by Art_Chen
-- [HyperIsland](https://github.com/1812z/HyperIsland) by 1812z（更新与首次引导交互参考）
-- [Miuix](https://github.com/YuKongA/miuix)
+- [HyperPods](https://github.com/Art-Chen/HyperPods) by Art_Chen（HyperOS 耳机接入参考）
+- [OpenFreebuds](https://github.com/melianmiko/OpenFreebuds) by melianmiko（华为耳机协议参考）
+- [HyperIsland](https://github.com/1812z/HyperIsland) by 1812z（关于页、更新与首次引导交互参考）
+- [HyperLight](https://github.com/KiminonawaResa/HyperLight) by KiminonawaResa（HyperOS 材质层次与动效参考）
+- [Miuix](https://github.com/compose-miuix-ui/miuix) by YuKongA（HyperOS 风格 Compose 界面组件）
 
 ## 许可证
 

@@ -83,6 +83,21 @@ class BluetoothUpstreamAncPolicyTest {
                 HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0x01),
             ),
         )
+        assertEquals(
+            HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0x04),
+            upstreamHuaweiAncStateForLevel(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+                "0204",
+                off,
+            ),
+        )
+        assertEquals(
+            "0204",
+            upstreamMiuiAncLevel(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+                HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0x04),
+            ),
+        )
         assertNull(
             upstreamHuaweiAncStateForLevel(
                 HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,

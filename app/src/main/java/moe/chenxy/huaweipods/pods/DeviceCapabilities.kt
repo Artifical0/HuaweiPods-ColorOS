@@ -5,6 +5,7 @@ enum class HuaweiDeviceRoute {
     HUAWEI_FREEBUDS4E,
     HUAWEI_FREEBUDS5,
     HUAWEI_FREEBUDS5I,
+    HUAWEI_FREEBUDS_SE4_ANC,
     HUAWEI_FREEBUDS6I,
     HUAWEI_FREEBUDS_PRO3,
     HUAWEI_FREEBUDS_PRO4,
@@ -30,6 +31,7 @@ data class HuaweiDeviceCapabilities(
     val supportsBackgroundBatteryRefresh: Boolean = false,
     val supportsGestureConfiguration: Boolean = false,
     val supportsLowLatencyControl: Boolean = false,
+    val supportsWindNoiseReduction: Boolean = false,
     val hasChargingCase: Boolean = false,
     val usesReportedEarbudAvailability: Boolean = false,
 )
@@ -73,6 +75,18 @@ private val routeCapabilities = linkedMapOf(
         supportsRfcommBattery = true,
         supportsGestureConfiguration = true,
         supportsLowLatencyControl = true,
+        hasChargingCase = true,
+    ),
+    HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC to HuaweiDeviceCapabilities(
+        displayName = "HUAWEI FreeBuds SE 4 ANC",
+        aliases = setOf("huaweifreebudsse4anc", "freebudsse4anc"),
+        supportsAnc = true,
+        supportsTransparency = true,
+        supportsAncStateReadback = true,
+        supportsDiscreteAncLevels = true,
+        supportsRfcommBattery = true,
+        supportsLowLatencyControl = true,
+        supportsWindNoiseReduction = true,
         hasChargingCase = true,
     ),
     HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to HuaweiDeviceCapabilities(
@@ -158,7 +172,7 @@ private val routeCapabilities = linkedMapOf(
     ),
     HuaweiDeviceRoute.HUAWEI_EYEWEAR to HuaweiDeviceCapabilities(
         displayName = "HUAWEI Eyewear",
-        aliases = setOf("huaweieyewear"),
+        aliases = setOf("huaweieyewear", "huaweieyewear3", "eyewear3"),
         supportsRfcommBattery = true,
     ),
     HuaweiDeviceRoute.HUAWEI_EYEWEAR2 to HuaweiDeviceCapabilities(
@@ -181,6 +195,7 @@ private val broadcastValueByRoute = mapOf(
     HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to "HUAWEI_FREEBUDS4E",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to "HUAWEI_FREEBUDS5",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to "HUAWEI_FREEBUDS5I",
+    HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC to "HUAWEI_FREEBUDS_SE4_ANC",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to "HUAWEI_FREEBUDS6I",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to "HUAWEI_FREEBUDS_PRO3",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 to "HUAWEI_FREEBUDS_PRO4",
@@ -232,6 +247,9 @@ val HuaweiDeviceRoute.supportsGestureConfiguration: Boolean
 
 val HuaweiDeviceRoute.supportsLowLatencyControl: Boolean
     get() = capabilities?.supportsLowLatencyControl == true
+
+val HuaweiDeviceRoute.supportsWindNoiseReduction: Boolean
+    get() = capabilities?.supportsWindNoiseReduction == true
 
 val HuaweiDeviceRoute.hasChargingCase: Boolean
     get() = capabilities?.hasChargingCase == true

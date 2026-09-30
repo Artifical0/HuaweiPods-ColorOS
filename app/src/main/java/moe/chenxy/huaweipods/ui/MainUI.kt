@@ -65,6 +65,7 @@ import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.UNKNOWN_HUAWEI_ANC_SUBMODE
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
 import moe.chenxy.huaweipods.pods.defaultAncSubMode
+import moe.chenxy.huaweipods.pods.defaultTransparencySubMode
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
 import moe.chenxy.huaweipods.pods.isKnown
 import moe.chenxy.huaweipods.pods.supportsAnc
@@ -73,10 +74,13 @@ import moe.chenxy.huaweipods.pods.supportsAncStateReadback
 import moe.chenxy.huaweipods.pods.supportsAncSubMode
 import moe.chenxy.huaweipods.pods.supportsDiscreteAncLevels
 import moe.chenxy.huaweipods.pods.supportsTransparency
+import moe.chenxy.huaweipods.pods.transparencySubModes
 import moe.chenxy.huaweipods.ui.dialogs.AvailableUpdateDialog
 import moe.chenxy.huaweipods.ui.dialogs.UpdatedAppDialog
-import moe.chenxy.huaweipods.ui.pages.AboutPage
+import moe.chenxy.huaweipods.ui.pages.AboutPageActions
+import moe.chenxy.huaweipods.ui.pages.AboutReferencesPage
 import moe.chenxy.huaweipods.ui.pages.DocumentationPage
+import moe.chenxy.huaweipods.ui.pages.SettingsPage
 import moe.chenxy.huaweipods.ui.pages.SponsorPage
 import moe.chenxy.huaweipods.ui.pages.ThemeSettingsPage
 import moe.chenxy.huaweipods.ui.pages.UpdateCheckSummary
@@ -110,20 +114,26 @@ import moe.chenxy.huaweipods.BuildConfig
 
 sealed interface Screen : NavKey {
     data object Main : Screen
-    data object About : Screen
+    data object Settings : Screen
     data object Theme : Screen
     data object Documentation : Screen
     data object Sponsor : Screen
+    data object References : Screen
 }
 
 private const val DEVICE_CONNECT_TIMEOUT_MS = 15_000L
 private const val GITHUB_REPOSITORY_URL = "https://github.com/Artifical0/HuaweiPods-ColorOS"
+// 关于页的开发者卡片展示 HuaweiPods 原作者，仓库、更新与反馈入口指向本适配版。
+private const val GITHUB_DEVELOPER_URL = "https://github.com/Nshpiter"
+private const val GITHUB_RELEASES_URL = "$GITHUB_REPOSITORY_URL/releases"
 private const val GITHUB_ISSUES_URL = "$GITHUB_REPOSITORY_URL/issues"
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
-fun MainUI(
+internal fun MainUI(
     backStack: SnapshotStateList<Screen>,
+    selectedTab: MainTab = MainTab.Module,
+    onSelectedTabChange: (MainTab) -> Unit = {},
     showUpdatedDialogOnLaunch: Boolean = false,
     onUpdatedDialogHandled: () -> Unit = {},
     onOpenOnboarding: () -> Unit = {},
@@ -153,7 +163,6 @@ fun MainUI(
     val huaweiTransparencySubMode = remember { mutableStateOf(-1) }
     val hookConnected = remember { mutableStateOf(false) }
     val tabs = remember { MainTab.entries.toList() }
-    var selectedTab by remember { mutableStateOf(MainTab.Module) }
     var hasAppliedDefaultTab by remember { mutableStateOf(false) }
     var bluetoothState by remember { mutableStateOf(readBluetoothState(context)) }
     var xposedService by remember { mutableStateOf(HuaweiPodsApp.xposedService) }
@@ -345,12 +354,12 @@ fun MainUI(
         when (transition.action) {
             NavigationAction.SWITCH_TO_EARPHONES_TAB -> {
                 showDevicePicker = false
-                selectedTab = MainTab.Earphones
+                onSelectedTabChange(MainTab.Earphones)
                 hasAppliedDefaultTab = true
                 pendingOpenEarphonesAfterPickerLoaded = false
             }
             NavigationAction.OPEN_EARPHONES_PICKER -> {
-                selectedTab = MainTab.Earphones
+                onSelectedTabChange(MainTab.Earphones)
                 showDevicePicker = true
                 hasAppliedDefaultTab = true
                 pendingOpenEarphonesAfterPickerLoaded = false
@@ -395,7 +404,9 @@ fun MainUI(
 
     LaunchedEffect(canShowDetailPage) {
         if (!hasAppliedDefaultTab) {
-            selectedTab = if (canShowDetailPage) MainTab.Earphones else MainTab.Module
+            if (selectedTab == MainTab.Module) {
+                onSelectedTabChange(if (canShowDetailPage) MainTab.Earphones else MainTab.Module)
+            }
             hasAppliedDefaultTab = true
         }
     }
@@ -522,7 +533,7 @@ fun MainUI(
                         applyNavigationTransition(navTransition)
                         if (navTransition.action == NavigationAction.NONE && shouldOpenEarphones) {
                             if (!hasAppliedDefaultTab) {
-                                selectedTab = MainTab.Earphones
+                                onSelectedTabChange(MainTab.Earphones)
                             }
                             hasAppliedDefaultTab = true
                             pendingOpenEarphonesAfterPickerLoaded = true
@@ -791,7 +802,7 @@ fun MainUI(
         hookConnectionState = "disconnected"
         showConnectErrorDialog = false
         showDevicePicker = true
-        selectedTab = MainTab.Earphones
+        onSelectedTabChange(MainTab.Earphones)
     }
 
     fun onDeviceSelected(device: BluetoothDevice, route: HuaweiDeviceRoute) {
@@ -810,7 +821,7 @@ fun MainUI(
         pendingOpenEarphonesAfterPickerLoaded = false
         showConnectErrorDialog = false
         showDevicePicker = true
-        selectedTab = MainTab.Earphones
+        onSelectedTabChange(MainTab.Earphones)
         hookConnectionState = "connecting"
         Intent(HuaweiPodsAction.ACTION_CONNECT_POD_REQUEST).apply {
             putExtra("device", device)
@@ -826,7 +837,7 @@ fun MainUI(
         hookConnected.value = true
         hookConnectionState = "connected"
         showDevicePicker = false
-        selectedTab = MainTab.Earphones
+        onSelectedTabChange(MainTab.Earphones)
     }
 
     fun backToDevicePicker() {
@@ -855,7 +866,7 @@ fun MainUI(
 
     fun openDevicePicker() {
         showDevicePicker = true
-        selectedTab = MainTab.Earphones
+        onSelectedTabChange(MainTab.Earphones)
     }
 
     @SuppressLint("MissingPermission")
@@ -953,12 +964,64 @@ fun MainUI(
         }
     }
 
+    fun previewUpdateDialog() {
+        val previewRelease = GitHubRelease(
+            tag = "${BuildConfig.VERSION_CODE + 1}-${BuildConfig.VERSION_NAME}-preview",
+            versionCode = BuildConfig.VERSION_CODE.toLong() + 1L,
+            versionName = "${BuildConfig.VERSION_NAME}-preview",
+            releaseUrl = GitHubReleaseChecker.LATEST_RELEASE_PAGE,
+            changelog = updatePreviewChangelog,
+        )
+        val persisted = pendingUpdateStore.save(
+            release = previewRelease,
+            isPreview = true,
+        )
+        Log.i(
+            "HuaweiPods-Update",
+            "Debug update preview requested: persisted=$persisted tag=${previewRelease.tag}",
+        )
+        updateCheckSummary = UpdateCheckSummary.Available(
+            versionName = previewRelease.versionName,
+        )
+        availableUpdate = previewRelease
+        previewUpdate = previewRelease
+    }
+
+    val aboutActions = AboutPageActions(
+        appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+        checkingForUpdates = checkingForUpdates,
+        updateCheckSummary = updateCheckSummary,
+        onCheckForUpdates = { checkForUpdates(manual = true) },
+        onPreviewUpdateDialog = if (BuildConfig.DEBUG) {
+            { previewUpdateDialog() }
+        } else {
+            null
+        },
+        onOpenDeveloper = { openExternalUrl(context, GITHUB_DEVELOPER_URL) },
+        onOpenGitHub = { openExternalUrl(context, GITHUB_REPOSITORY_URL) },
+        onOpenChangelog = { openExternalUrl(context, GITHUB_RELEASES_URL) },
+        onOpenIssues = { openExternalUrl(context, GITHUB_ISSUES_URL) },
+        onCopyQqGroup = { copyQqGroup() },
+        qqGroupNumber = qqGroupNumber,
+        onOpenOnboarding = onOpenOnboarding,
+        onOpenSettings = {
+            if (backStack.lastOrNull() != Screen.Settings) {
+                backStack.add(Screen.Settings)
+            }
+        },
+        onOpenReferences = {
+            if (backStack.lastOrNull() != Screen.References) {
+                backStack.add(Screen.References)
+            }
+        },
+    )
+
     val entryProvider = entryProvider<Screen> {
         entry<Screen.Main> {
             MainTabsScaffold(
                 tabs = tabs,
                 selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it },
+                onTabSelected = onSelectedTabChange,
                 floatingBottomBar = floatingBottomBar.value,
                 blurBottomBar = blurBottomBar.value,
                 backdrop = backdrop,
@@ -993,83 +1056,7 @@ fun MainUI(
                 onDeviceSelected = { device, route -> onDeviceSelected(device, route) },
                 onConnectedDeviceClick = { onConnectedDeviceClick() },
                 onDismissConnectError = { showConnectErrorDialog = false },
-                desktopIconHidden = desktopIconHidden,
-                onDesktopIconHiddenChange = {
-                    desktopIconHidden.value = it
-                    setLauncherIconHidden(context, it)
-                },
-                checkUpdatesOnLaunch = checkUpdatesOnLaunch,
-                onCheckUpdatesOnLaunchChange = {
-                    checkUpdatesOnLaunch.value = it
-                    lifecyclePrefs.setCheckUpdatesOnLaunch(it)
-                    if (it && lifecyclePrefs.shouldRunAutomaticCheck()) {
-                        checkForUpdates(manual = false)
-                    }
-                },
-                logLevel = logLevel,
-                onLogLevelChange = {
-                    logLevel.value = it
-                    ConfigManager.updateLogLevel(prefs, xposedService, it)
-                    broadcastConfigChanged(context, "com.android.bluetooth")
-                    broadcastConfigChanged(context, "com.milink.service")
-                    broadcastConfigChanged(context, "com.xiaomi.bluetooth")
-                },
-                islandMode = islandMode,
-                onIslandModeChange = {
-                    islandMode.value = it
-                    ConfigManager.updateIslandMode(prefs, xposedService, it)
-                    broadcastConfigChanged(context, "com.android.bluetooth")
-                    broadcastConfigChanged(context, "com.xiaomi.bluetooth")
-                },
-                persistentNotificationEnabled = persistentNotificationEnabled,
-                onPersistentNotificationEnabledChange = {
-                    persistentNotificationEnabled.value = it
-                    ConfigManager.updatePersistentNotificationEnabled(prefs, xposedService, it)
-                    broadcastConfigChanged(context, "com.android.bluetooth")
-                    broadcastConfigChanged(context, "com.xiaomi.bluetooth")
-                },
-                lockscreenNotificationEnabled = lockscreenNotificationEnabled,
-                onLockscreenNotificationEnabledChange = {
-                    lockscreenNotificationEnabled.value = it
-                    ConfigManager.updateLockscreenNotificationEnabled(prefs, xposedService, it)
-                    broadcastConfigChanged(context, "com.android.bluetooth")
-                    broadcastConfigChanged(context, "com.xiaomi.bluetooth")
-                },
-                appLanguage = appLanguage,
-                onAppLanguageChange = {
-                    appLanguage.value = it
-                    onAppLanguageChange(it)
-                },
-                milinkLowLatencyCardEnabled = milinkLowLatencyCardEnabled,
-                onMilinkLowLatencyCardEnabledChange = {
-                    milinkLowLatencyCardEnabled.value = it
-                    ConfigManager.updateMilinkLowLatencyCardEnabled(prefs, xposedService, it)
-                    broadcastConfigChanged(context, "com.milink.service")
-                },
-                notificationClickAction = notificationClickAction,
-                onNotificationClickActionChange = {
-                    notificationClickAction.value = it
-                    ConfigManager.updateNotificationClickAction(prefs, xposedService, it)
-                    broadcastConfigChanged(context, "com.android.bluetooth")
-                    broadcastConfigChanged(context, "com.xiaomi.bluetooth")
-                },
-                moreClickAction = moreClickAction,
-                onMoreClickActionChange = {
-                    moreClickAction.value = it
-                    ConfigManager.updateMoreClickAction(prefs, xposedService, it)
-                },
-                fakeDeviceId = fakeDeviceId,
-                onFakeDeviceIdChange = {
-                    fakeDeviceId.value = it
-                    ConfigManager.updateFakeDeviceId(prefs, xposedService, it)
-                    broadcastConfigChanged(context, "com.android.bluetooth")
-                    broadcastConfigChanged(context, "com.android.settings")
-                    broadcastConfigChanged(context, "com.milink.service")
-                    broadcastConfigChanged(context, "com.xiaomi.bluetooth")
-                },
-                onOpenTheme = { backStack.add(Screen.Theme) },
-                onOpenColorOsLiveAlertSettings = { openColorOsLiveAlertSettings() },
-                onOpenAbout = { backStack.add(Screen.About) },
+                aboutActions = aboutActions,
                 onOpenDocumentation = { backStack.add(Screen.Documentation) },
                 onOpenSponsor = { backStack.add(Screen.Sponsor) },
                 showRestartScopeDialog = showRestartScopeDialog,
@@ -1093,73 +1080,6 @@ fun MainUI(
                 },
             )
         }
-        entry<Screen.About> {
-            val aboutScrollBehavior = MiuixScrollBehavior(rememberTopAppBarState())
-
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = stringResource(R.string.about),
-                        largeTitle = stringResource(R.string.about),
-                        scrollBehavior = aboutScrollBehavior,
-                        navigationIcon = {
-                            IconButton(onClick = { backStack.removeLast() }) {
-                                Icon(imageVector = MiuixIcons.Back, contentDescription = "Back")
-                            }
-                        }
-                    )
-                }
-            ) { padding ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(backgroundColor)
-                        .padding(padding),
-                ) {
-                    AboutPage(
-                        modifier = Modifier
-                            .overScrollVertical()
-                            .nestedScroll(aboutScrollBehavior.nestedScrollConnection),
-                        contentPadding = PaddingValues(bottom = pageBottomContentPadding),
-                        appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                        checkingForUpdates = checkingForUpdates,
-                        updateCheckSummary = updateCheckSummary,
-                        onCheckForUpdates = { checkForUpdates(manual = true) },
-                        onPreviewUpdateDialog = if (BuildConfig.DEBUG) {
-                            {
-                                val previewRelease = GitHubRelease(
-                                    tag = "${BuildConfig.VERSION_CODE + 1}-${BuildConfig.VERSION_NAME}-preview",
-                                    versionCode = BuildConfig.VERSION_CODE.toLong() + 1L,
-                                    versionName = "${BuildConfig.VERSION_NAME}-preview",
-                                    releaseUrl = GitHubReleaseChecker.LATEST_RELEASE_PAGE,
-                                    changelog = updatePreviewChangelog,
-                                )
-                                val persisted = pendingUpdateStore.save(
-                                    release = previewRelease,
-                                    isPreview = true,
-                                )
-                                Log.i(
-                                    "HuaweiPods-Update",
-                                    "Debug update preview requested: persisted=$persisted tag=${previewRelease.tag}",
-                                )
-                                updateCheckSummary = UpdateCheckSummary.Available(
-                                    versionName = previewRelease.versionName,
-                                )
-                                availableUpdate = previewRelease
-                                previewUpdate = previewRelease
-                            }
-                        } else {
-                            null
-                        },
-                        onOpenGitHub = { openExternalUrl(context, GITHUB_REPOSITORY_URL) },
-                        onOpenIssues = { openExternalUrl(context, GITHUB_ISSUES_URL) },
-                        onCopyQqGroup = { copyQqGroup() },
-                        qqGroupNumber = qqGroupNumber,
-                        onOpenOnboarding = onOpenOnboarding,
-                    )
-                }
-            }
-        }
         entry<Screen.Theme> {
             val themeScrollBehavior = MiuixScrollBehavior(rememberTopAppBarState())
 
@@ -1171,7 +1091,10 @@ fun MainUI(
                         scrollBehavior = themeScrollBehavior,
                         navigationIcon = {
                             IconButton(onClick = { backStack.removeLast() }) {
-                                Icon(imageVector = MiuixIcons.Back, contentDescription = "Back")
+                                Icon(
+                                    imageVector = MiuixIcons.Back,
+                                    contentDescription = stringResource(R.string.back),
+                                )
                             }
                         }
                     )
@@ -1196,6 +1119,122 @@ fun MainUI(
                         onFloatingBottomBarChange = onFloatingBottomBarChange,
                         blurBottomBar = blurBottomBar,
                         onBlurBottomBarChange = onBlurBottomBarChange,
+                    )
+                }
+            }
+        }
+        entry<Screen.Settings> {
+            val settingsScrollBehavior = MiuixScrollBehavior(rememberTopAppBarState())
+
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = stringResource(R.string.settings),
+                        largeTitle = stringResource(R.string.settings),
+                        scrollBehavior = settingsScrollBehavior,
+                        navigationIcon = {
+                            IconButton(onClick = { backStack.removeLast() }) {
+                                Icon(
+                                    imageVector = MiuixIcons.Back,
+                                    contentDescription = stringResource(R.string.back),
+                                )
+                            }
+                        },
+                    )
+                },
+            ) { padding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(backgroundColor),
+                ) {
+                    SettingsPage(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .overScrollVertical()
+                            .nestedScroll(settingsScrollBehavior.nestedScrollConnection),
+                        contentPadding = PaddingValues(
+                            top = padding.calculateTopPadding(),
+                            bottom = padding.calculateBottomPadding(),
+                        ),
+                        desktopIconHidden = desktopIconHidden,
+                        onDesktopIconHiddenChange = {
+                            desktopIconHidden.value = it
+                            setLauncherIconHidden(context, it)
+                        },
+                        checkUpdatesOnLaunch = checkUpdatesOnLaunch,
+                        onCheckUpdatesOnLaunchChange = {
+                            checkUpdatesOnLaunch.value = it
+                            lifecyclePrefs.setCheckUpdatesOnLaunch(it)
+                            if (it && lifecyclePrefs.shouldRunAutomaticCheck()) {
+                                checkForUpdates(manual = false)
+                            }
+                        },
+                        logLevel = logLevel,
+                        onLogLevelChange = {
+                            logLevel.value = it
+                            ConfigManager.updateLogLevel(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.android.bluetooth")
+                            broadcastConfigChanged(context, "com.milink.service")
+                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                        },
+                        islandMode = islandMode,
+                        onIslandModeChange = {
+                            islandMode.value = it
+                            ConfigManager.updateIslandMode(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.android.bluetooth")
+                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                        },
+                        persistentNotificationEnabled = persistentNotificationEnabled,
+                        onPersistentNotificationEnabledChange = {
+                            persistentNotificationEnabled.value = it
+                            ConfigManager.updatePersistentNotificationEnabled(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                        },
+                        lockscreenNotificationEnabled = lockscreenNotificationEnabled,
+                        onLockscreenNotificationEnabledChange = {
+                            lockscreenNotificationEnabled.value = it
+                            ConfigManager.updateLockscreenNotificationEnabled(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.android.bluetooth")
+                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                        },
+                        appLanguage = appLanguage,
+                        onAppLanguageChange = {
+                            appLanguage.value = it
+                            onAppLanguageChange(it)
+                        },
+                        milinkLowLatencyCardEnabled = milinkLowLatencyCardEnabled,
+                        onMilinkLowLatencyCardEnabledChange = {
+                            milinkLowLatencyCardEnabled.value = it
+                            ConfigManager.updateMilinkLowLatencyCardEnabled(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.milink.service")
+                        },
+                        notificationClickAction = notificationClickAction,
+                        onNotificationClickActionChange = {
+                            notificationClickAction.value = it
+                            ConfigManager.updateNotificationClickAction(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                        },
+                        moreClickAction = moreClickAction,
+                        onMoreClickActionChange = {
+                            moreClickAction.value = it
+                            ConfigManager.updateMoreClickAction(prefs, xposedService, it)
+                        },
+                        fakeDeviceId = fakeDeviceId,
+                        onFakeDeviceIdChange = {
+                            fakeDeviceId.value = it
+                            ConfigManager.updateFakeDeviceId(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.android.bluetooth")
+                            broadcastConfigChanged(context, "com.android.settings")
+                            broadcastConfigChanged(context, "com.milink.service")
+                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                        },
+                        onOpenTheme = {
+                            if (backStack.lastOrNull() != Screen.Theme) {
+                                backStack.add(Screen.Theme)
+                            }
+                        },
+                        onOpenColorOsLiveAlertSettings = { openColorOsLiveAlertSettings() },
                     )
                 }
             }
@@ -1265,6 +1304,42 @@ fun MainUI(
                             .overScrollVertical()
                             .nestedScroll(sponsorScrollBehavior.nestedScrollConnection),
                         contentPadding = PaddingValues(bottom = pageBottomContentPadding),
+                    )
+                }
+            }
+        }
+        entry<Screen.References> {
+            val referencesScrollBehavior = MiuixScrollBehavior(rememberTopAppBarState())
+
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = stringResource(R.string.about_references),
+                        largeTitle = stringResource(R.string.about_references),
+                        scrollBehavior = referencesScrollBehavior,
+                        navigationIcon = {
+                            IconButton(onClick = { backStack.removeLast() }) {
+                                Icon(
+                                    imageVector = MiuixIcons.Back,
+                                    contentDescription = stringResource(R.string.back),
+                                )
+                            }
+                        },
+                    )
+                },
+            ) { padding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(backgroundColor)
+                        .padding(padding),
+                ) {
+                    AboutReferencesPage(
+                        onOpenReference = { openExternalUrl(context, it) },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .overScrollVertical()
+                            .nestedScroll(referencesScrollBehavior.nestedScrollConnection),
                     )
                 }
             }
@@ -1417,10 +1492,10 @@ private fun broadcastConfigChanged(context: Context, packageName: String) {
 }
 
 private fun supportedTransparencySubModes(route: HuaweiDeviceRoute): Set<Int> =
-    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) setOf(0x01, 0x02) else setOf(0x01, 0xFF)
+    route.transparencySubModes
 
 private fun defaultTransparencySubMode(route: HuaweiDeviceRoute): Int =
-    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) 0x02 else 0xFF
+    route.defaultTransparencySubMode ?: 0xFF
 
 @Suppress("DEPRECATION")
 private fun Intent.parcelableBatteryStatus(): BatteryParams? =

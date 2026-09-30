@@ -21,6 +21,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.R
@@ -37,6 +38,7 @@ import moe.chenxy.huaweipods.pods.HuaweiSwipeAction
 import moe.chenxy.huaweipods.pods.HuaweiTapAction
 import moe.chenxy.huaweipods.pods.ancLevelOptions
 import moe.chenxy.huaweipods.pods.defaultAncSubMode
+import moe.chenxy.huaweipods.pods.defaultTransparencySubMode
 import moe.chenxy.huaweipods.pods.huaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
@@ -49,6 +51,7 @@ import moe.chenxy.huaweipods.pods.supportsAncSubMode
 import moe.chenxy.huaweipods.pods.supportsDiscreteAncLevels
 import moe.chenxy.huaweipods.pods.supportsGestureConfiguration
 import moe.chenxy.huaweipods.pods.supportsTransparency
+import moe.chenxy.huaweipods.pods.transparencySubModes
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
@@ -130,6 +133,7 @@ object SettingsHeadsetHook : HookContext() {
     private val swipeActionCache = linkedMapOf<String, HuaweiSwipeAction>()
     private var context: Context? = null
     private var receiverRegistered = false
+    private var statusReceiver: BroadcastReceiver? = null
     private var currentAddress: String? = null
     private var currentName: String? = null
     private var currentRoute: HuaweiDeviceRoute? = null
@@ -149,8 +153,10 @@ object SettingsHeadsetHook : HookContext() {
     private var settingsHeaderBitmapCache: SettingsHeaderBitmapCache? = null
     private val hiddenSettingsCapabilityViews = WeakHashMap<View, HiddenSettingsCapabilityView>()
     private val relabeledFreeBuds6iTransparencyTexts = WeakHashMap<TextView, CharSequence>()
-    private val observedSettingsRoots = WeakHashMap<View, Boolean>()
+    private val observedSettingsRoots =
+        WeakHashMap<View, android.view.ViewTreeObserver.OnScrollChangedListener>()
     private val pendingSettingsScrollPrunes = WeakHashMap<View, Runnable>()
+    private val pendingSettingsInitialPrunes = WeakHashMap<View, MutableSet<Runnable>>()
     private val refreshHandler = Handler(Looper.getMainLooper())
     private var refreshLoopStarted = false
     private val refreshRunnable = object : Runnable {
@@ -171,6 +177,122 @@ object SettingsHeadsetHook : HookContext() {
         hookServiceProxy()
         hookBatteryView()
         hookFragmentState()
+        runCatching {
+            val activityThread = Class.forName("android.app.ActivityThread")
+            activityThread.getDeclaredMethod("currentApplication").invoke(null) as? Context
+        }.getOrNull()?.let(::registerStatusReceiver)
+        recreateVisibleHeadsetActivities()
+    }
+
+    override fun onCanClose(): Boolean = runOnMainThreadBlocking { }
+
+    override fun onSaveHotReloadState(outState: Bundle) {
+        outState.putString("address", currentAddress)
+        outState.putString("name", currentName)
+        outState.putString("route", currentRoute?.name)
+        outState.putBoolean("anc_confirmed", currentAncConfirmed)
+    }
+
+    override fun onRestoreHotReloadState(savedState: Bundle) {
+        currentAddress = savedState.getString("address")
+        currentName = savedState.getString("name")
+        currentRoute = savedState.getString("route")?.let { routeName ->
+            runCatching { HuaweiDeviceRoute.valueOf(routeName) }.getOrNull()
+        }
+        currentAncConfirmed = savedState.getBoolean("anc_confirmed", false)
+        requestBluetoothStatus("hot-reload-restored")
+    }
+
+    override fun onClose() {
+        refreshLoopStarted = false
+        refreshHandler.removeCallbacksAndMessages(null)
+        check(runOnMainThreadBlocking {
+            pendingSettingsScrollPrunes.entries.toList().forEach { (root, task) ->
+                root.removeCallbacks(task)
+            }
+            pendingSettingsScrollPrunes.clear()
+            pendingSettingsInitialPrunes.entries.toList().forEach { (root, tasks) ->
+                tasks.toList().forEach(root::removeCallbacks)
+            }
+            pendingSettingsInitialPrunes.clear()
+
+            observedSettingsRoots.entries.toList().forEach { (root, listener) ->
+                runCatching {
+                    if (root.viewTreeObserver.isAlive) {
+                        root.viewTreeObserver.removeOnScrollChangedListener(listener)
+                    }
+                }
+                restoreTrackedSettingsCapabilityViews(root)
+                restoreFreeBuds6iTransparencyLabels(root)
+                removeHotReloadInjectedViews(root)
+            }
+            observedSettingsRoots.clear()
+        }) { "Settings UI cleanup timed out" }
+
+        val receiver = statusReceiver
+        val receiverContext = context
+        if (receiver != null && receiverContext != null) {
+            runCatching { receiverContext.unregisterReceiver(receiver) }
+                .onFailure { error ->
+                    if (error !is IllegalArgumentException) {
+                        Log.w(TAG, "Failed to unregister Settings status receiver", error)
+                    }
+                }
+        }
+        statusReceiver = null
+        receiverRegistered = false
+        context = null
+
+        knownHuaweiAddresses.clear()
+        batteryViews.clear()
+        headsetFragments.clear()
+        keyConfigFragments.clear()
+        gestureActionCache.clear()
+        swipeActionCache.clear()
+        hiddenSettingsCapabilityViews.clear()
+        relabeledFreeBuds6iTransparencyTexts.clear()
+        settingsHeaderBitmapCache = null
+        currentAddress = null
+        currentName = null
+        currentRoute = null
+        currentAncConfirmed = false
+    }
+
+    private fun removeHotReloadInjectedViews(root: View) {
+        listOf(
+            SETTINGS_HUAWEI_DIAL_TAG,
+            SETTINGS_HUAWEI_TRANSPARENCY_SELECTOR_TAG,
+            SETTINGS_HUAWEI_ANC_SELECTOR_TAG,
+            SETTINGS_FREECLIP2_AUDIO_CONTROLS_TAG,
+        ).forEach { tag ->
+            while (true) {
+                val injected = findTaggedView(root, tag) ?: break
+                val parent = injected.parent as? ViewGroup ?: break
+                parent.removeView(injected)
+            }
+        }
+    }
+
+    /** API 102 不会重放 Fragment 生命周期；重建当前耳机页让新代重新注入完整 UI。 */
+    private fun recreateVisibleHeadsetActivities() {
+        runCatching {
+            val activityThreadClass = Class.forName("android.app.ActivityThread")
+            val activityThread = activityThreadClass.getDeclaredMethod("currentActivityThread")
+                .apply { isAccessible = true }
+                .invoke(null) ?: return@runCatching
+            val records = getObjectField(activityThread, "mActivities") as? Map<*, *>
+                ?: return@runCatching
+            records.values.mapNotNull { record ->
+                getObjectField(record, "activity")
+            }.filter { activity ->
+                activity.javaClass.name.contains("MiuiHeadsetActivity", ignoreCase = true)
+            }.forEach { activity ->
+                Handler(Looper.getMainLooper()).post {
+                    runCatching { callMethod(activity, "recreate") }
+                        .onFailure { Log.w(TAG, "Unable to recreate active headset activity", it) }
+                }
+            }
+        }.onFailure { Log.w(TAG, "Unable to inspect active headset activities", it) }
     }
 
     private fun hookActivityEntry() {
@@ -597,6 +719,11 @@ object SettingsHeadsetHook : HookContext() {
                 fragmentRootView(instance)?.let { root ->
                     runCatching { pruneFreeBudsUnsupportedViews(root) }
                         .onFailure { Log.w(TAG, "Settings prune after updateAncUi failed", it) }
+                    // 宿主会在 updateAncUi 返回后继续通过动画/绑定恢复原生档位条。
+                    // 保留立即裁剪避免闪现，再在消息队列和动画稳定后重新应用一次。
+                    if (requiresDeferredSettingsAncLevelPrune(currentHuaweiRoute())) {
+                        schedulePruneFreeBudsUnsupportedViews(root)
+                    }
                 }
             }
         }.onFailure { Log.w(TAG, "hook MiuiHeadsetFragment.updateAncUi skipped", it) }
@@ -648,7 +775,7 @@ object SettingsHeadsetHook : HookContext() {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_POD_IMAGES_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONFIG_CHANGED)
         }
-        context?.registerReceiver(object : BroadcastReceiver() {
+        val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val receivedIntent = intent ?: return
                 when (HuaweiPodsAction.canonical(receivedIntent.action)) {
@@ -761,14 +888,24 @@ object SettingsHeadsetHook : HookContext() {
                             HuaweiPodsAction.EXTRA_FREECLIP2_SOUND_EFFECT,
                         )
                         currentFreeClip2AudioState = currentFreeClip2AudioState.mergeExtraValues(
-                            spatialModeValue = spatialModeValue,
-                            spatialSceneValue = spatialSceneValue,
-                            soundEffectValue = soundEffectValue,
-                        )
-                        freeClip2AudioPendingGate.observeConfirmed(
-                            spatialModeValue,
-                            spatialSceneValue,
-                            soundEffectValue,
+                            spatialModeValue = spatialModeValue?.takeIf {
+                                freeClip2AudioPendingGate.shouldApplyConfirmed(
+                                    HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_MODE,
+                                    it,
+                                )
+                            },
+                            spatialSceneValue = spatialSceneValue?.takeIf {
+                                freeClip2AudioPendingGate.shouldApplyConfirmed(
+                                    HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_SCENE,
+                                    it,
+                                )
+                            },
+                            soundEffectValue = soundEffectValue?.takeIf {
+                                freeClip2AudioPendingGate.shouldApplyConfirmed(
+                                    HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SOUND_EFFECT,
+                                    it,
+                                )
+                            },
                         )
                         saveCurrentFreeClip2AudioState(context)
                         updateFragments()
@@ -783,7 +920,9 @@ object SettingsHeadsetHook : HookContext() {
                 }
                 Log.d(TAG, "state action=${receivedIntent.action} address=$currentAddress anc=$currentAnc battery=${settingsBatteryString()}")
             }
-        }, filter, Context.RECEIVER_EXPORTED)
+        }
+        context?.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+        statusReceiver = receiver
         receiverRegistered = true
         requestBluetoothStatus("receiver-register")
         Log.d(TAG, "registered status receiver context=$context")
@@ -1206,10 +1345,10 @@ object SettingsHeadsetHook : HookContext() {
             ?: 0
 
     private fun defaultTransparencySubMode(route: HuaweiDeviceRoute): Int =
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) 0x02 else 0xFF
+        route.defaultTransparencySubMode ?: 0xFF
 
     private fun supportedTransparencySubModes(route: HuaweiDeviceRoute): Set<Int> =
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) setOf(0x01, 0x02) else setOf(0x01, 0xFF)
+        route.transparencySubModes
 
     private fun transparencySubMode(route: HuaweiDeviceRoute): Int =
         currentTransparencySubMode.takeIf { it in supportedTransparencySubModes(route) }
@@ -1613,9 +1752,8 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun moduleString(context: Context, resId: Int, fallback: String): String {
         return runCatching {
-            val moduleContext = context.createPackageContext(BuildConfig.APPLICATION_ID, Context.CONTEXT_IGNORE_SECURITY)
-            if (!ModuleResourceResolver.isCurrentModuleBuild(moduleContext)) return fallback
-            moduleContext.getString(resId)
+            if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return fallback
+            ModuleResourceResolver.resources(context)?.getString(resId) ?: fallback
         }.getOrElse { fallback }
     }
 
@@ -1690,14 +1828,21 @@ object SettingsHeadsetHook : HookContext() {
         val expectedAddress = currentAddress?.takeIf(String::isNotBlank) ?: return
         val expectedRoute = currentHuaweiRoute()
         listOf(0L, 180L).forEach { delay ->
-            root.postDelayed({
+            lateinit var task: Runnable
+            task = Runnable {
+                pendingSettingsInitialPrunes[root]?.let { tasks ->
+                    tasks.remove(task)
+                    if (tasks.isEmpty()) pendingSettingsInitialPrunes.remove(root)
+                }
                 if (!expectedAddress.equals(currentAddress, ignoreCase = true) || expectedRoute != currentHuaweiRoute()) {
                     Log.d(TAG, "Settings unsupported row prune skipped for stale device address=$expectedAddress route=$expectedRoute")
-                    return@postDelayed
+                    return@Runnable
                 }
                 runCatching { pruneFreeBudsUnsupportedViews(root) }
                     .onFailure { Log.w(TAG, "Settings unsupported row prune failed", it) }
-            }, delay)
+            }
+            pendingSettingsInitialPrunes.getOrPut(root, ::linkedSetOf).add(task)
+            root.postDelayed(task, delay)
         }
     }
 
@@ -1705,15 +1850,15 @@ object SettingsHeadsetHook : HookContext() {
         this == HuaweiDeviceRoute.HUAWEI_FREECLIP2 || this == HuaweiDeviceRoute.HUAWEI_FREEARC
 
     private fun observeSettingsScroll(root: View) {
-        if (observedSettingsRoots.put(root, true) == true) return
-        root.viewTreeObserver.addOnScrollChangedListener {
-            if (!root.isAttachedToWindow) return@addOnScrollChangedListener
+        if (observedSettingsRoots.containsKey(root)) return
+        val listener = android.view.ViewTreeObserver.OnScrollChangedListener listener@{
+            if (!root.isAttachedToWindow) return@listener
 
             // RecyclerView 滚动时会高频触发回调。整棵树的恢复、关键词扫描和布局裁剪都必须
             // 留到滚动停止后再做，否则会与每一帧 measure/layout 争用主线程，造成明显掉帧。
             pendingSettingsScrollPrunes.remove(root)?.let(root::removeCallbacks)
             val expectedAddress = currentAddress?.takeIf(String::isNotBlank)
-                ?: return@addOnScrollChangedListener
+                ?: return@listener
             val expectedRoute = currentHuaweiRoute()
             val task = object : Runnable {
                 override fun run() {
@@ -1733,6 +1878,8 @@ object SettingsHeadsetHook : HookContext() {
             pendingSettingsScrollPrunes[root] = task
             root.postDelayed(task, SETTINGS_SCROLL_SETTLE_MS)
         }
+        observedSettingsRoots[root] = listener
+        root.viewTreeObserver.addOnScrollChangedListener(listener)
     }
 
     private fun pruneFreeBudsUnsupportedViews(root: View) {
@@ -1883,6 +2030,11 @@ object SettingsHeadsetHook : HookContext() {
             Log.w(TAG, "Settings FreeClip 2 audio request send failed kind=$kind value=$value")
             return
         }
+        currentFreeClip2AudioState.withSelection(kind, value)?.let { selected ->
+            currentFreeClip2AudioState = selected
+            saveCurrentFreeClip2AudioState(ctx)
+            updateFragments()
+        }
         schedulePruneFreeBudsUnsupportedViews(root)
         Log.i(TAG, "Settings FreeClip 2 audio requested address=$address kind=$kind value=$value")
     }
@@ -1950,8 +2102,8 @@ object SettingsHeadsetHook : HookContext() {
                     verifiedRoute = route,
                 )
             } else {
-                val moduleContext = context.createPackageContext(BuildConfig.APPLICATION_ID, Context.CONTEXT_IGNORE_SECURITY)
-                if (!ModuleResourceResolver.isCurrentModuleBuild(moduleContext)) return null
+                if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return null
+                val moduleResources = ModuleResourceResolver.resources(context) ?: return null
                 val resourceId = when (route) {
                     HuaweiDeviceRoute.HUAWEI_FREEBUDS5 -> R.drawable.img_freebuds5_box
                     HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> R.drawable.img_freebuds6i_settings
@@ -1960,7 +2112,7 @@ object SettingsHeadsetHook : HookContext() {
                     HuaweiDeviceRoute.HUAWEI_EYEWEAR2 -> R.drawable.img_eyewear2_box
                     else -> R.drawable.img_box
                 }
-                BitmapFactory.decodeResource(moduleContext.resources, resourceId)
+                BitmapFactory.decodeResource(moduleResources, resourceId)
             }
         }.onSuccess { bitmap ->
             if (bitmap != null) settingsHeaderBitmapCache = SettingsHeaderBitmapCache(key, bitmap)
@@ -2028,16 +2180,20 @@ object SettingsHeadsetHook : HookContext() {
         ) {
             existingDial?.visibility = View.GONE
             existingAncSelector?.visibility = View.GONE
-            if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+            val nativeTransparencyAnchor = findNativeTransparencyAnchor(root)
+            if (usesNativeSettingsTransparencySelector(route)) {
                 existingTransparencySelector?.visibility = View.GONE
-                val nativeAnchor = findFreeBuds6iNativeTransparencyAnchor(root)
-                if (nativeAnchor != null) {
-                    setSettingsCapabilityViewVisible(nativeAnchor, true)
-                    relabelFreeBuds6iNativeTransparencyOptions(nativeAnchor)
+                if (nativeTransparencyAnchor != null) {
+                    setSettingsCapabilityViewVisible(nativeTransparencyAnchor, true)
+                    relabelFreeBuds6iNativeTransparencyOptions(nativeTransparencyAnchor)
                 } else {
                     Log.w(TAG, "FreeBuds 6i native transparency selector not found")
                 }
                 return
+            }
+            // Pro 5 等机型使用模块按协议值生成的选择器，原生二态控件会重复且映射不完整。
+            nativeTransparencyAnchor?.let {
+                setSettingsCapabilityViewVisible(it, false, collapseLayout = false)
             }
             levelAnchor?.let { setSettingsCapabilityViewVisible(it, false) }
             val anchor = levelAnchor ?: modeButtonContainer(root)
@@ -2106,6 +2262,7 @@ object SettingsHeadsetHook : HookContext() {
         if (dial != null) {
             dial.setLevel(currentHuaweiAncLevel)
             dial.visibility = View.VISIBLE
+            hideNativeSettingsAncLevelControls(root, dial)
         }
     }
 
@@ -2207,7 +2364,11 @@ object SettingsHeadsetHook : HookContext() {
         route: HuaweiDeviceRoute,
     ): List<HuaweiAncSubModeSelectorView.Option> = route.ancLevelOptions.map { option ->
         val label = when (option.level) {
-            HuaweiAncLevel.ADAPTIVE -> moduleString(context, R.string.anc_level_adaptive, "智慧动态")
+            HuaweiAncLevel.ADAPTIVE -> if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5) {
+                moduleString(context, R.string.freebuds_pro5_anc_level_adaptive, "智慧双擎降噪")
+            } else {
+                moduleString(context, R.string.anc_level_adaptive, "智慧动态")
+            }
             HuaweiAncLevel.LIGHT -> moduleString(context, R.string.anc_level_light, "轻度")
             HuaweiAncLevel.BALANCED -> moduleString(context, R.string.anc_level_balanced, "均衡")
             HuaweiAncLevel.DEEP -> moduleString(context, R.string.anc_level_deep, "深度")
@@ -2218,16 +2379,35 @@ object SettingsHeadsetHook : HookContext() {
     private fun transparencySelectorOptions(
         context: Context,
         route: HuaweiDeviceRoute,
-    ): List<HuaweiAncSubModeSelectorView.Option> = listOf(
-        HuaweiAncSubModeSelectorView.Option(
-            defaultTransparencySubMode(route),
-            moduleString(context, R.string.transparency_standard, "普通"),
-        ),
-        HuaweiAncSubModeSelectorView.Option(
-            0x01,
-            moduleString(context, R.string.transparency_voice, "人声增强"),
-        ),
-    )
+    ): List<HuaweiAncSubModeSelectorView.Option> {
+        val standard = defaultTransparencySubMode(route)
+        return buildList {
+            if (standard in route.transparencySubModes) {
+                add(
+                    HuaweiAncSubModeSelectorView.Option(
+                        standard,
+                        moduleString(context, R.string.transparency_standard, "普通"),
+                    ),
+                )
+            }
+            if (0x01 in route.transparencySubModes && 0x01 != standard) {
+                add(
+                    HuaweiAncSubModeSelectorView.Option(
+                        0x01,
+                        moduleString(context, R.string.transparency_voice, "人声增强"),
+                    ),
+                )
+            }
+            if (0x04 in route.transparencySubModes) {
+                add(
+                    HuaweiAncSubModeSelectorView.Option(
+                        0x04,
+                        moduleString(context, R.string.transparency_adaptive, "智慧动态透传"),
+                    ),
+                )
+            }
+        }
+    }
 
     private fun isSettingsDarkMode(context: Context): Boolean =
         context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
@@ -2236,6 +2416,115 @@ object SettingsHeadsetHook : HookContext() {
     private fun hideHuaweiAncLevelArea(root: View, anchor: View) {
         setSettingsCapabilityViewVisible(anchor, false)
         Log.d(TAG, "Settings MIUI ANC level anchor hidden view=${anchor.javaClass.name}")
+    }
+
+    private fun hideNativeSettingsAncLevelControls(
+        root: View,
+        replacementDial: HuaweiAncLevelDialView,
+    ) {
+        val nativeLevelRegion = replacementDial.parent as? ViewGroup ?: return
+        hideNativeSettingsAncLevelSiblingBranches(root, nativeLevelRegion, replacementDial)
+        val candidates = mutableListOf<View>()
+
+        fun visit(view: View) {
+            if (
+                view === replacementDial ||
+                view.tag == SETTINGS_HUAWEI_DIAL_TAG ||
+                view.tag == SETTINGS_HUAWEI_ANC_SELECTOR_TAG ||
+                view.tag == SETTINGS_HUAWEI_TRANSPARENCY_SELECTOR_TAG
+            ) {
+                return
+            }
+            val resourceEntryName = view.resourceEntryNameOrNull()
+            val progressMax = (view as? ProgressBar)?.max
+            if (
+                view !== root &&
+                view !== nativeLevelRegion &&
+                view.isDescendantOf(nativeLevelRegion) &&
+                isNativeSettingsAncLevelControl(
+                    className = view.javaClass.name,
+                    resourceEntryName = resourceEntryName,
+                    progressMax = progressMax,
+                )
+            ) {
+                candidates += view
+            }
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) visit(view.getChildAt(index))
+            }
+        }
+
+        visit(root)
+        val eligibleCandidates = candidates.filter { candidate ->
+            findTaggedView(candidate, SETTINGS_HUAWEI_DIAL_TAG) == null
+        }
+        val candidateSet = eligibleCandidates.toSet()
+        eligibleCandidates
+            .filter { candidate ->
+                generateSequence(candidate.parent as? View) { parent -> parent.parent as? View }
+                    .takeWhile { ancestor -> ancestor !== root }
+                    .none(candidateSet::contains)
+            }
+            .forEach { candidate ->
+                setSettingsCapabilityViewVisible(candidate, false, collapseLayout = true)
+                Log.i(
+                    TAG,
+                    "Settings native ANC level control hidden " +
+                        "class=${candidate.javaClass.name} " +
+                        "id=${candidate.resourceEntryNameOrNull().orEmpty()} " +
+                        "max=${(candidate as? ProgressBar)?.max}",
+                )
+            }
+    }
+
+    private fun hideNativeSettingsAncLevelSiblingBranches(
+        root: View,
+        nativeLevelRegion: ViewGroup,
+        replacementDial: HuaweiAncLevelDialView,
+    ) {
+        val modeLabels = mutableListOf<TextView>()
+        collectAncModeTextMatches(nativeLevelRegion, modeLabels)
+        val modeBranch = modeLabels
+            .mapNotNull { label -> directChildUnder(nativeLevelRegion, label) }
+            .groupingBy { it }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+            ?: modeButtonContainer(root)?.let { directChildUnder(nativeLevelRegion, it) }
+            ?: return
+        val modeIndex = nativeLevelRegion.indexOfChild(modeBranch)
+        val dialIndex = nativeLevelRegion.indexOfChild(replacementDial)
+        val targets = nativeSettingsAncLevelSiblingIndexes(modeIndex, dialIndex)
+            .map(nativeLevelRegion::getChildAt)
+            .filter { view ->
+                view.tag != SETTINGS_HUAWEI_DIAL_TAG &&
+                    view.tag != SETTINGS_HUAWEI_ANC_SELECTOR_TAG &&
+                    view.tag != SETTINGS_HUAWEI_TRANSPARENCY_SELECTOR_TAG &&
+                    findTaggedView(view, SETTINGS_HUAWEI_DIAL_TAG) == null
+            }
+        targets.forEach { target ->
+            setSettingsCapabilityViewVisible(target, false, collapseLayout = true)
+            Log.i(
+                TAG,
+                "Settings native ANC level sibling hidden " +
+                    "index=${nativeLevelRegion.indexOfChild(target)} " +
+                    "class=${target.javaClass.name} " +
+                    "id=${target.resourceEntryNameOrNull().orEmpty()}",
+            )
+        }
+    }
+
+    private fun directChildUnder(parent: ViewGroup, descendant: View): View? {
+        var current = descendant
+        while (current.parent is View && current.parent !== parent) {
+            current = current.parent as View
+        }
+        return current.takeIf { it.parent === parent }
+    }
+
+    private fun View.resourceEntryNameOrNull(): String? {
+        if (id == View.NO_ID) return null
+        return runCatching { resources.getResourceEntryName(id) }.getOrNull()
     }
 
     private fun setSettingsCapabilityViewVisible(
@@ -2468,7 +2757,7 @@ object SettingsHeadsetHook : HookContext() {
         return target
     }
 
-    private fun findFreeBuds6iNativeTransparencyAnchor(root: View): View? {
+    private fun findNativeTransparencyAnchor(root: View): View? {
         val matches = mutableListOf<TextView>()
         collectNativeTransparencyTextMatches(
             root,

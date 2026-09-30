@@ -86,6 +86,24 @@ class HuaweiAncPacketsTest {
     }
 
     @Test
+    fun `FreeBuds SE 4 ANC packets match verified capture`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC
+        assertArrayEquals(
+            hex("5A0007002B0401020000D22D"),
+            HuaweiAncPackets.mode(route, NoiseControlMode.OFF),
+        )
+        assertArrayEquals(
+            hex("5A0007002B04010202FFAABF"),
+            HuaweiAncPackets.mode(route, NoiseControlMode.TRANSPARENCY),
+        )
+        assertArrayEquals(
+            hex("5A0007002B0401020102C15E"),
+            HuaweiAncPackets.mode(route, NoiseControlMode.NOISE_CANCELLATION, 0x02),
+        )
+        assertNull(HuaweiAncPackets.mode(route, NoiseControlMode.NOISE_CANCELLATION, 0x03))
+    }
+
+    @Test
     fun `FreeBuds Pro 3 uses captured ANC on and protocol family off packets`() {
         assertArrayEquals(
             hex("5A0007002B0401020000D22D"),
@@ -125,6 +143,14 @@ class HuaweiAncPacketsTest {
         assertArrayEquals(
             hex("5A0007002B0401020202940D"),
             HuaweiAncPackets.mode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5, NoiseControlMode.TRANSPARENCY),
+        )
+        assertArrayEquals(
+            hex("5A0007002B0401020204F4CB"),
+            HuaweiAncPackets.mode(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+                NoiseControlMode.TRANSPARENCY,
+                0x04,
+            ),
         )
     }
 
@@ -193,11 +219,12 @@ class HuaweiAncPacketsTest {
     }
 
     @Test
-    fun `Pro 3 and 6i entering modes from off replay captured FF transition packets`() {
+    fun `Pro 3 Pro 5 and 6i entering modes from off replay captured FF transition packets`() {
         val off = HuaweiAncState(NoiseControlMode.OFF)
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
         ).forEach { route ->
             assertArrayEquals(
                 route.name,
@@ -240,6 +267,7 @@ class HuaweiAncPacketsTest {
     fun `modern models with captured readback expose the ANC state query`() {
         val query = hex("5A0005002B2A0100427E")
 
+        assertArrayEquals(query, HuaweiAncPackets.currentStateQuery(HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC))
         assertArrayEquals(query, HuaweiAncPackets.currentStateQuery(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I))
         assertArrayEquals(query, HuaweiAncPackets.currentStateQuery(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3))
         assertArrayEquals(query, HuaweiAncPackets.currentStateQuery(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5))
@@ -289,6 +317,27 @@ class HuaweiAncPacketsTest {
                     HuaweiAncPackets.mode(route, NoiseControlMode.NOISE_CANCELLATION, option.protocolValue),
                 )
             }
+        }
+    }
+
+    @Test
+    fun `Pro 5 packets follow the Smart Audio labels confirmed on device`() {
+        val expected = mapOf(
+            HuaweiAncLevel.ADAPTIVE to "5A0007002B0401020103D17F",
+            HuaweiAncLevel.LIGHT to "5A0007002B0401020101F13D",
+            HuaweiAncLevel.BALANCED to "5A0007002B0401020100E11C",
+            HuaweiAncLevel.DEEP to "5A0007002B0401020102C15E",
+        )
+
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5.ancLevelOptions.forEach { option ->
+            assertArrayEquals(
+                hex(expected.getValue(option.level)),
+                HuaweiAncPackets.mode(
+                    HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+                    NoiseControlMode.NOISE_CANCELLATION,
+                    option.protocolValue,
+                ),
+            )
         }
     }
 
