@@ -3,7 +3,7 @@
     <string name="app_description">Independent ColorOS adaptation for Huawei earphones</string>
     <string name="app_subtitle">Independent Huawei earphone adaptation for ColorOS</string>
     <string name="coloros_live_alert_channel">Earphones live alert</string>
-    <string name="coloros_live_alert_fallback_title">HUAWEI FreeClip</string>
+    <string name="coloros_live_alert_fallback_title">Huawei earphones</string>
     <string name="coloros_live_alert_settings">ColorOS Fluid Cloud</string>
     <string name="coloros_live_alert_settings_summary">Open system notification settings and enable Live alerts</string>
     <string name="coloros_background_settings">ColorOS auto-launch</string>
