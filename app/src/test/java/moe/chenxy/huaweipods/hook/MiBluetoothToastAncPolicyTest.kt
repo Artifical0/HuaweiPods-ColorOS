@@ -81,6 +81,14 @@ class MiBluetoothToastAncPolicyTest {
         assertTrue(shouldAcceptPodsNotificationUpdate(false, null))
     }
     @Test
+    fun `notification click target is isolated by bluetooth address`() {
+        val first = headsetNotificationIntentIdentity("AA:BB:CC:DD:EE:01")
+        val second = headsetNotificationIntentIdentity("AA:BB:CC:DD:EE:02")
+
+        assertTrue(first != second)
+    }
+
+    @Test
     fun `notification exposes ANC only for verified ANC earbuds`() {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
@@ -108,5 +116,20 @@ class MiBluetoothToastAncPolicyTest {
         ).forEach { route ->
             assertFalse(route.name, shouldOfferNotificationAncAction(route))
         }
+    }
+
+    @Test
+    fun `case opening is detected only after the case stopped reporting`() {
+        assertFalse(isColorOsCaseOpened(previousCaseReported = null, caseReported = true))
+        assertTrue(isColorOsCaseOpened(previousCaseReported = false, caseReported = true))
+        assertFalse(isColorOsCaseOpened(previousCaseReported = true, caseReported = true))
+        assertFalse(isColorOsCaseOpened(previousCaseReported = false, caseReported = false))
+    }
+
+    @Test
+    fun `case open popup is rate limited per device`() {
+        assertTrue(shouldShowColorOsCaseOpenPopup(lastCaseOpenPopupAt = null, now = 1_000L))
+        assertFalse(shouldShowColorOsCaseOpenPopup(lastCaseOpenPopupAt = 1_000L, now = 10_000L))
+        assertTrue(shouldShowColorOsCaseOpenPopup(lastCaseOpenPopupAt = 1_000L, now = 16_000L))
     }
 }

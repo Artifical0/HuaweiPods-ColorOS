@@ -29,6 +29,7 @@ internal object ColorOsAccessoryPopupBridge {
     private const val DRAWABLE_DESCRIPTION =
         "com.heytap.accessory.plugin.discovery.DialogParams\$DrawableDes"
     private val SAFE_IMAGE_FILE_NAME = Regex("[A-Za-z0-9._-]+")
+    private val SAFE_DRAWABLE_NAME = Regex("[a-z0-9_]+")
     internal const val POPUP_IMAGE_DRAWABLE_ID = 0x7f0e7a11
 
     // ColorOS treats 1/2 as updates to an already visible card and filters them when there
@@ -45,6 +46,7 @@ internal object ColorOsAccessoryPopupBridge {
         deviceName: String,
         batteryText: String,
         imageFileName: String?,
+        fallbackDrawableName: String? = null,
     ): Boolean = runCatching {
         val classLoader = accessoryClassLoader(context)
         val paramsClass = Class.forName(DIALOG_PARAMS, true, classLoader)
@@ -56,7 +58,7 @@ internal object ColorOsAccessoryPopupBridge {
 
         // Marker consumed by ColorOsAccessoryFrameworkHook. The vendor renderer safely falls
         // back to its host resources when this package is not an installed PantaConnect plugin.
-        setString("setPackageName", popupMarkerPackageName(imageFileName))
+        setString("setPackageName", popupMarkerPackageName(imageFileName, fallbackDrawableName))
         setString("setTitle", deviceName)
         setString("setContinueButton", "完成")
         setString("setNotificationTile", deviceName)
@@ -121,13 +123,35 @@ internal object ColorOsAccessoryPopupBridge {
     private val ApplicationInfoFlags: Int
         get() = 0
 
-    internal fun popupMarkerPackageName(imageFileName: String?): String = imageFileName
-        ?.takeIf(SAFE_IMAGE_FILE_NAME::matches)
-        ?.let { "${BuildConfig.APPLICATION_ID}|$it" }
-        ?: BuildConfig.APPLICATION_ID
+    /**
+     * 卡片包名兼作跨进程标记：`应用 ID|缓存图片文件名|型号内置图资源名`。文件名与资源名分别
+     * 校验，快速设备连接进程只会读取本模块 Provider 中的文件或本模块 APK 中的 drawable。
+     */
+    internal fun popupMarkerPackageName(
+        imageFileName: String?,
+        fallbackDrawableName: String? = null,
+    ): String {
+        val image = imageFileName?.takeIf(SAFE_IMAGE_FILE_NAME::matches).orEmpty()
+        val fallback = fallbackDrawableName?.takeIf(SAFE_DRAWABLE_NAME::matches).orEmpty()
+        return when {
+            fallback.isNotEmpty() -> "${BuildConfig.APPLICATION_ID}|$image|$fallback"
+            image.isNotEmpty() -> "${BuildConfig.APPLICATION_ID}|$image"
+            else -> BuildConfig.APPLICATION_ID
+        }
+    }
 
-    internal fun popupImageFileNameFromMarker(packageName: String?): String? = packageName
+    internal fun isHuaweiPodsMarker(packageName: String?): Boolean =
+        packageName == BuildConfig.APPLICATION_ID ||
+            packageName?.startsWith("${BuildConfig.APPLICATION_ID}|") == true
+
+    internal fun popupImageFileNameFromMarker(packageName: String?): String? =
+        markerParts(packageName)?.getOrNull(0)?.takeIf(SAFE_IMAGE_FILE_NAME::matches)
+
+    internal fun popupFallbackDrawableFromMarker(packageName: String?): String? =
+        markerParts(packageName)?.getOrNull(1)?.takeIf(SAFE_DRAWABLE_NAME::matches)
+
+    private fun markerParts(packageName: String?): List<String>? = packageName
         ?.takeIf { it.startsWith("${BuildConfig.APPLICATION_ID}|") }
         ?.substringAfter('|')
-        ?.takeIf(SAFE_IMAGE_FILE_NAME::matches)
+        ?.split('|')
 }

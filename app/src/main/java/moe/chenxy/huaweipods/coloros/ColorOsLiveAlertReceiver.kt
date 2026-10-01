@@ -22,6 +22,11 @@ import androidx.core.app.NotificationCompat
 import moe.chenxy.huaweipods.MainActivity
 import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.config.ConfigManager
+import moe.chenxy.huaweipods.config.PodImageResource
+import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
+import moe.chenxy.huaweipods.pods.displayName
+import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.platform.RomFamily
 import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
@@ -45,6 +50,14 @@ internal fun shouldAcceptColorOsLiveAlertBatteryUpdate(
     lastDisconnectElapsed: Long,
     eventElapsed: Long,
 ): Boolean = lastDisconnectElapsed <= 0L || eventElapsed > lastDisconnectElapsed
+
+/** 记录断开时间：早于该时间的电量广播不会再把流体云拉起来。 */
+internal fun markColorOsLiveAlertDisconnected(context: Context, elapsedRealtime: Long) {
+    context.getSharedPreferences("coloros_live_alert_state", Context.MODE_PRIVATE).edit()
+        .putLong("last_disconnect_elapsed", elapsedRealtime)
+        .remove("current_address")
+        .apply()
+}
 
 internal fun NotificationCompat.Builder.requestColorOsLiveAlert(chipText: String?) = apply {
     // ColorOS 16 also supports promotion on API 36.0. AndroidX writes
@@ -192,9 +205,20 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
         }.joinToString("  ")
         val address = intent.getStringExtra("address").orEmpty()
         val prefs = context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE)
+        // 蓝牙进程已确认机型：用于选择机型内置图，避免 FreeClip 2 等型号显示成一代 FreeClip。
+        val route = decodeHuaweiDeviceRouteFromBroadcast(
+            intent.getStringExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE),
+        )?.takeIf { it.isSupported }
         val largeIcon = address.takeIf(String::isNotBlank)
-            ?.let { PodImageLoader.loadBoxBitmap(context, prefs, it) }
-            ?: BitmapFactory.decodeResource(context.resources, R.drawable.img_freeclip_box)
+            ?.let { PodImageLoader.loadBoxBitmap(context, prefs, it, verifiedRoute = route) }
+            ?: BitmapFactory.decodeResource(
+                context.resources,
+                PodImageLoader.modelFallbackResId(
+                    route ?: HuaweiDeviceRoute.UNSUPPORTED,
+                    PodImageResource.BOX,
+                    R.drawable.img_box,
+                ),
+            )
         val requestCode = if (address.isNotBlank()) address.hashCode() else 0
         val contentIntent = PendingIntent.getActivity(
             context,
@@ -217,6 +241,7 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             .setContentTitle(
                 intent.getStringExtra("device_name")
                     ?.takeIf(String::isNotBlank)
+                    ?: route?.displayName
                     ?: context.getString(R.string.coloros_live_alert_fallback_title),
             )
             .setContentText(contentText)

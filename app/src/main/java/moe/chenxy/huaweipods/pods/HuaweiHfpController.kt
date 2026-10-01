@@ -16,6 +16,7 @@ import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.LowLatencyPrefs
+import moe.chenxy.huaweipods.hook.ColorOsSystemBatteryBridge
 import moe.chenxy.huaweipods.hook.Log
 import moe.chenxy.huaweipods.smartaudio.OfficialImageIdentityBridge
 import moe.chenxy.huaweipods.utils.miuiStrongToast.MiuiStrongToastUtil
@@ -417,6 +418,7 @@ object HuaweiHfpController {
                 )
             }
             stopBackgroundBatteryRefresh()
+            ColorOsSystemBatteryBridge.clear(context, device)
             MiuiStrongToastUtil.cancelPodsNotificationByMiuiBt(context, device)
             sendAppBroadcast(HuaweiPodsAction.ACTION_PODS_DISCONNECTED) {
                 putExtra("address", device.address)
@@ -2124,6 +2126,13 @@ object HuaweiHfpController {
         battery: BatteryParams,
         cached: Boolean = currentBatteryIsCached,
     ) {
+        if (!cached) {
+            val currentContext = context
+            val currentDevice = device
+            if (currentContext != null && currentDevice != null) {
+                ColorOsSystemBatteryBridge.publish(currentContext, currentDevice, battery)
+            }
+        }
         sendAppBroadcast(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED) {
             putExtra("status", battery)
             putBatteryExtras(battery)

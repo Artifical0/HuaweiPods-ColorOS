@@ -109,6 +109,8 @@ jobs:
           artifacts: "./${{ steps.sign.outputs.apk }}"
           name: ${{ steps.sign.outputs.version_name }}
           bodyFile: ${{ steps.sign.outputs.release_notes }}
-          makeLatest: true
+          # 标签含 -rc 的构建发布为预发布，不设为 Latest，应用内检查更新也不会推送。
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
+          makeLatest: ${{ !contains(github.ref_name, '-rc') }}
           allowUpdates: true
           replacesArtifacts: true

@@ -18,22 +18,32 @@ import android.view.MotionEvent
 import android.view.View
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.R
+import moe.chenxy.huaweipods.utils.ModuleResourceResolver
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import java.util.WeakHashMap
 
 internal fun shouldSuppressColorOsPopupClose(
-    isHuaweiPodsFreeClipCard: Boolean,
+    isHuaweiPodsCard: Boolean,
     isUserClickInProgress: Boolean,
     automaticCloseAlreadySuppressed: Boolean,
-): Boolean = isHuaweiPodsFreeClipCard &&
+): Boolean = isHuaweiPodsCard &&
     !isUserClickInProgress &&
     !automaticCloseAlreadySuppressed
 
-/** Keeps HuaweiPods' explicitly marked FreeClip card visible in ColorOS Quick Connect. */
+/** Keeps HuaweiPods' explicitly marked headset card visible in ColorOS Quick Connect. */
 object ColorOsAccessoryFrameworkHook : HookContext() {
     private const val DIALOG_ACTIVITY =
         "com.oplus.pantaconnect.appcore.devicediscovery.ui.DialogActivity"
     private const val USER_CLOSE_WINDOW_MS = 3_000L
+
+    /**
+     * 弹窗数据的 protobuf 外层类：ColorOS 17（快速设备连接 17.6.x）保留了原名，
+     * ColorOS 16.1（17.4.x）被混淆为 `fd.c`。
+     */
+    private val POPUP_BASE_VIEW_DATA_CLASSES = listOf(
+        "com.oplus.pantaconnect.data.BaseViewData",
+        "fd.c",
+    )
     private val automaticCloseSuppressed = WeakHashMap<Any, Boolean>()
     private val lastUserTouchElapsed = WeakHashMap<Any, Long>()
     private val userClickDepth = ThreadLocal<Int>()
@@ -41,9 +51,13 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
     @Volatile
     private var receiverRegistered = false
     @Volatile
+    private var handshakeReceiver: BroadcastReceiver? = null
+    @Volatile
     private var accessoryContext: Context? = null
     @Volatile
     private var popupImageFileName: String? = null
+    @Volatile
+    private var popupFallbackDrawableName: String? = null
 
     override fun onHook() {
         hookPopupImageResources()
@@ -57,9 +71,11 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
                 hookBefore(onCreate) {
                     val activity = instance ?: return@hookBefore
                     val card = readPopupCard(activity) ?: return@hookBefore
-                    if (isHuaweiPodsFreeClipCard(card)) {
+                    if (isHuaweiPodsCard(card)) {
                         popupImageFileName =
                             ColorOsAccessoryPopupBridge.popupImageFileNameFromMarker(card.packageName)
+                        popupFallbackDrawableName =
+                            ColorOsAccessoryPopupBridge.popupFallbackDrawableFromMarker(card.packageName)
                     }
                 }
             }.onFailure {
@@ -82,12 +98,10 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
             }.onFailure {
                 Log.w("HuaweiPods", "ColorOS Quick Connect touch tracking unavailable", it)
             }
-            val finishDialog = activityClass.getDeclaredMethod("h", activityClass).apply {
-                isAccessible = true
-            }
+            val finishDialog = findPopupFinishMethod(activityClass)
             hookBefore(finishDialog) {
                 val activity = args.firstOrNull() ?: return@hookBefore
-                if (!isHuaweiPodsFreeClipCard(readPopupCard(activity))) return@hookBefore
+                if (!isHuaweiPodsCard(readPopupCard(activity))) return@hookBefore
                 val now = SystemClock.elapsedRealtime()
                 val lastTouch = synchronized(lastUserTouchElapsed) {
                     lastUserTouchElapsed[activity]
@@ -99,7 +113,7 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
                     automaticCloseSuppressed[activity] == true
                 }
                 if (shouldSuppressColorOsPopupClose(
-                        isHuaweiPodsFreeClipCard = true,
+                        isHuaweiPodsCard = true,
                         isUserClickInProgress = isUserClickInProgress,
                         automaticCloseAlreadySuppressed = wasAutomaticCloseAlreadySuppressed,
                     )
@@ -108,14 +122,14 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
                         automaticCloseSuppressed[activity] = true
                     }
                     result = null
-                    Log.i("HuaweiPods", "Suppressed ColorOS automatic FreeClip card close")
+                    Log.i("HuaweiPods", "Suppressed ColorOS automatic headset card close")
                 } else if (isUserClickInProgress) {
                     synchronized(lastUserTouchElapsed) {
                         lastUserTouchElapsed.remove(activity)
                     }
                     Log.i(
                         "HuaweiPods",
-                        "Allowed ColorOS FreeClip card close after user action (touchAgeMs=$touchAge)",
+                        "Allowed ColorOS headset card close after user action (touchAgeMs=$touchAge)",
                     )
                 }
             }
@@ -130,6 +144,25 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
         ) {
             (args[0] as? Context)?.let(::registerHostHandshake)
         }
+        // API 102 热重载不会重放 Application.attach()；新代直接用当前 Application 恢复握手。
+        currentApplicationOrNull()?.let(::registerHostHandshake)
+    }
+
+    override fun onClose() {
+        synchronized(registrationLock) {
+            val receiver = handshakeReceiver
+            val context = accessoryContext
+            if (receiver != null && context != null) {
+                runCatching { context.unregisterReceiver(receiver) }
+            }
+            handshakeReceiver = null
+            receiverRegistered = false
+        }
+        accessoryContext = null
+        popupImageFileName = null
+        popupFallbackDrawableName = null
+        synchronized(automaticCloseSuppressed) { automaticCloseSuppressed.clear() }
+        synchronized(lastUserTouchElapsed) { lastUserTouchElapsed.clear() }
     }
 
     /** Marks close callbacks reached synchronously from a real ColorOS view click. */
@@ -146,14 +179,14 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
             if (
                 activity?.javaClass?.name == DIALOG_ACTIVITY &&
                 resourceName in setOf("button_single_big", "button_close") &&
-                isHuaweiPodsFreeClipCard(readPopupCard(activity))
+                isHuaweiPodsCard(readPopupCard(activity))
             ) {
                 synchronized(lastUserTouchElapsed) {
                     lastUserTouchElapsed.remove(activity)
                 }
                 activity.finish()
                 result = true
-                Log.i("HuaweiPods", "Closed ColorOS FreeClip card from $resourceName")
+                Log.i("HuaweiPods", "Closed ColorOS headset card from $resourceName")
                 return@hookBefore
             }
             userClickDepth.set((userClickDepth.get() ?: 0) + 1)
@@ -175,6 +208,22 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
         return current as? Activity
     }
 
+    /**
+     * 自动关闭卡片的静态入口 `static void x(DialogActivity)`：16.1 名为 `h`，17.6 名为 `g`。
+     * 名称随混淆变化，按签名定位；出现多个候选时放弃，避免拦截到其他逻辑。
+     */
+    internal fun findPopupFinishMethod(activityClass: Class<*>): java.lang.reflect.Method {
+        val candidates = activityClass.declaredMethods.filter { method ->
+            java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+                method.returnType == Void.TYPE &&
+                method.parameterTypes.contentEquals(arrayOf(activityClass))
+        }
+        return candidates.singleOrNull()?.apply { isAccessible = true }
+            ?: throw NoSuchMethodException(
+                "static void (DialogActivity) candidates=${candidates.map { it.name }}",
+            )
+    }
+
     private data class PopupCard(val packageName: String?, val title: String?)
 
     private fun readPopupCard(activity: Any): PopupCard? = runCatching {
@@ -182,7 +231,9 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
             ?: return@runCatching null
         val outer = intent.getBundleExtra("intent_bundle") ?: return@runCatching null
         val bytes = outer.getByteArray("base_view_data") ?: return@runCatching null
-        val baseClass = findClass("fd.c")
+        val baseClass = POPUP_BASE_VIEW_DATA_CLASSES.firstNotNullOfOrNull { name ->
+            runCatching { findClass(name) }.getOrNull()
+        } ?: throw ClassNotFoundException(POPUP_BASE_VIEW_DATA_CLASSES.joinToString())
         val base = baseClass.getMethod("parseFrom", ByteArray::class.java)
             .invoke(null, bytes)
         val plugin = baseClass.getMethod("getPluginViewData").invoke(base)
@@ -194,10 +245,8 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
         Log.w("HuaweiPods", "Unable to identify ColorOS Quick Connect card", it)
     }.getOrNull()
 
-    private fun isHuaweiPodsFreeClipCard(card: PopupCard?): Boolean =
-        card?.packageName?.let {
-            it == BuildConfig.APPLICATION_ID || it.startsWith("${BuildConfig.APPLICATION_ID}|")
-        } == true && card.title?.contains("FreeClip", ignoreCase = true) == true
+    private fun isHuaweiPodsCard(card: PopupCard?): Boolean =
+        ColorOsAccessoryPopupBridge.isHuaweiPodsMarker(card?.packageName)
 
     private fun registerHostHandshake(sourceContext: Context) {
         val context = sourceContext.applicationContext ?: sourceContext
@@ -220,6 +269,7 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
                     Context.RECEIVER_EXPORTED,
                 )
             }.onSuccess {
+                handshakeReceiver = receiver
                 receiverRegistered = true
                 sendReady(context)
             }.onFailure {
@@ -282,15 +332,17 @@ object ColorOsAccessoryFrameworkHook : HookContext() {
             if (cachedImage != null) return BitmapDrawable(targetResources, cachedImage)
         }
         return runCatching {
-            val moduleResources = context.createPackageContext(
-                BuildConfig.APPLICATION_ID,
-                Context.CONTEXT_IGNORE_SECURITY,
-            ).resources
-            val bitmap = BitmapFactory.decodeResource(moduleResources, R.drawable.img_freeclip_box)
+            val moduleResources = ModuleResourceResolver.resources(context)
+                ?: return@runCatching null
+            // 型号专属内置图由蓝牙进程按已识别的机型写入卡片标记；未知机型使用通用耳机图。
+            val modelDrawable = popupFallbackDrawableName
+                ?.let { moduleResources.getIdentifier(it, "drawable", BuildConfig.APPLICATION_ID) }
+                ?.takeIf { it != 0 }
+            val bitmap = BitmapFactory.decodeResource(moduleResources, modelDrawable ?: R.drawable.img_box)
                 ?: return@runCatching null
             BitmapDrawable(targetResources, bitmap)
         }.onFailure {
-            Log.w("HuaweiPods", "ColorOS popup bundled original FreeClip image unavailable", it)
+            Log.w("HuaweiPods", "ColorOS popup bundled headset image unavailable", it)
         }.getOrNull()
     }
 }

@@ -48,26 +48,30 @@ class HuaweiHfpAncStateTest {
     }
 
     @Test
-    fun `pro 3 and pro 5 accept standard and voice transparency`() {
+    fun `pro 3 accepts captured transition and voice transparency`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3
         assertEquals(
             0xFF,
-            normalizeHuaweiAncSubMode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3, NoiseControlMode.TRANSPARENCY, 0xFF, offState),
+            normalizeHuaweiAncSubMode(route, NoiseControlMode.TRANSPARENCY, 0xFF, offState),
         )
         assertEquals(
             0x01,
-            normalizeHuaweiAncSubMode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3, NoiseControlMode.TRANSPARENCY, 0x01, offState),
+            normalizeHuaweiAncSubMode(route, NoiseControlMode.TRANSPARENCY, 0x01, offState),
         )
+    }
+
+    @Test
+    fun `pro 5 accepts its three selectable transparency values`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5
+        listOf(0x02, 0x01, 0x04).forEach { value ->
+            assertEquals(
+                value,
+                normalizeHuaweiAncSubMode(route, NoiseControlMode.TRANSPARENCY, value, offState),
+            )
+        }
         assertEquals(
             0x02,
-            normalizeHuaweiAncSubMode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5, NoiseControlMode.TRANSPARENCY, 0x02, offState),
-        )
-        assertEquals(
-            0x01,
-            normalizeHuaweiAncSubMode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5, NoiseControlMode.TRANSPARENCY, 0x01, offState),
-        )
-        assertEquals(
-            0x04,
-            normalizeHuaweiAncSubMode(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5, NoiseControlMode.TRANSPARENCY, 0x04, offState),
+            normalizeHuaweiAncSubMode(route, NoiseControlMode.TRANSPARENCY, 0xFF, offState),
         )
     }
 

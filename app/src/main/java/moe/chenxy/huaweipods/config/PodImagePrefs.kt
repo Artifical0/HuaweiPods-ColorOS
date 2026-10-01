@@ -8,6 +8,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import moe.chenxy.huaweipods.BuildConfig
 
 enum class PodImageResource(val fileSuffix: String) {
     BOX("box"),
@@ -51,7 +52,8 @@ internal data class CloudImageIdentityPref(
 
 object PodImagePrefs {
     private const val MAX_CLOUD_IDENTITIES = 16
-    const val AUTHORITY = "moe.chenxy.huaweipods.podimages"
+    /** 与 Manifest 中的 `${applicationId}.podimages` 保持一致，独立包名下不能指向原版 HuaweiPods。 */
+    const val AUTHORITY = "${BuildConfig.APPLICATION_ID}.podimages"
     private const val PREF_KEY_EARPHONES = "earphone_prefs_json"
     private const val PREF_KEY_CLOUD_IDENTITIES = "cloud_image_identities_json"
     private const val IMAGE_DIR = "pod_images"
@@ -239,10 +241,12 @@ object PodImagePrefs {
     fun syncSnapshotToRemote(
         prefs: SharedPreferences,
         service: XposedService,
-    ): List<EarphonePref> = syncSnapshotToRemote(
-        prefs = prefs,
-        remotePrefs = service.getRemotePreferences(ConfigManager.PREFS_NAME),
-    )
+    ): List<EarphonePref> {
+        val remotePrefs = runCatching {
+            service.getRemotePreferences(ConfigManager.PREFS_NAME)
+        }.getOrNull() ?: return load(prefs)
+        return syncSnapshotToRemote(prefs, remotePrefs)
+    }
 
     /** 测试入口；远程 IPC 全程不持有 mutationLock。 */
     internal fun syncSnapshotToRemote(
@@ -253,7 +257,9 @@ object PodImagePrefs {
             val snapshot = synchronized(mutationLock) {
                 PreferenceMutation(load(prefs), mutationRevision)
             }
-            writeSnapshot(remotePrefs, snapshot.earphones)
+            if (!tryWriteSnapshot(remotePrefs, snapshot.earphones)) {
+                return@synchronized snapshot.earphones
+            }
             val stillLatest = synchronized(mutationLock) { snapshot.revision == mutationRevision }
             if (stillLatest) return@synchronized snapshot.earphones
         }
@@ -279,12 +285,23 @@ object PodImagePrefs {
 
     /** 远程偏好 IPC 不持有 mutationLock；较旧快照会在发送前被丢弃。 */
     private fun syncRemote(service: XposedService?, mutation: PreferenceMutation) {
-        val remotePrefs = service?.getRemotePreferences(ConfigManager.PREFS_NAME) ?: return
+        val remotePrefs = runCatching {
+            service?.getRemotePreferences(ConfigManager.PREFS_NAME)
+        }.getOrNull() ?: return
         synchronized(remoteSyncLock) {
             val stillLatest = synchronized(mutationLock) { mutation.revision == mutationRevision }
-            if (stillLatest) writeSnapshot(remotePrefs, mutation.earphones)
+            if (stillLatest) tryWriteSnapshot(remotePrefs, mutation.earphones)
         }
     }
+
+    /** RemotePreferences 可能是 LSPosed 的只读代理，写入失败时不能影响宿主进程。 */
+    private fun tryWriteSnapshot(
+        prefs: SharedPreferences,
+        earphones: List<EarphonePref>,
+    ): Boolean = runCatching {
+        writeSnapshot(prefs, earphones)
+        true
+    }.getOrDefault(false)
 
     private fun writeSnapshot(
         prefs: SharedPreferences,
