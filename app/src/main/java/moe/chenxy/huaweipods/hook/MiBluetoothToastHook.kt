@@ -72,6 +72,21 @@ internal fun shouldAttemptColorOsAutoPopup(
     screenInteractive &&
     !keyguardLocked
 
+/**
+ * 华为耳机只在充电盒开盖时上报盒电量：盒电量从“未上报”变为“已上报”即视为开盖。
+ * 首次上报（尚无记录）属于连接事件，由连接弹窗处理。
+ */
+internal fun isColorOsCaseOpened(previousCaseReported: Boolean?, caseReported: Boolean): Boolean =
+    previousCaseReported == false && caseReported
+
+internal fun shouldShowColorOsCaseOpenPopup(
+    lastCaseOpenPopupAt: Long?,
+    now: Long,
+    cooldownMs: Long = COLOR_OS_CASE_OPEN_POPUP_COOLDOWN_MS,
+): Boolean = lastCaseOpenPopupAt == null || now - lastCaseOpenPopupAt >= cooldownMs
+
+internal const val COLOR_OS_CASE_OPEN_POPUP_COOLDOWN_MS = 15_000L
+
 internal fun shouldDelegateColorOsNotificationToApp(
     isColorOsHost: Boolean,
     appCanPostNotifications: Boolean,
@@ -85,6 +100,8 @@ object MiBluetoothToastHook : HookContext() {
     private val activeNotificationAddresses = ConcurrentHashMap.newKeySet<String>()
     private val disconnectedNotificationAddresses = ConcurrentHashMap.newKeySet<String>()
     private val officialPopupShownAddresses = ConcurrentHashMap.newKeySet<String>()
+    private val lastCaseReported = ConcurrentHashMap<String, Boolean>()
+    private val lastCaseOpenPopupAt = ConcurrentHashMap<String, Long>()
     @Volatile
     private var receiverRegistered = false
     @Volatile
@@ -117,6 +134,7 @@ object MiBluetoothToastHook : HookContext() {
 
         fun clearConnectionPopupState(address: String) {
             officialPopupShownAddresses.remove(address)
+            lastCaseReported.remove(address)
         }
 
         fun cancelAllPodsNotifications(context: Context) {
@@ -515,6 +533,7 @@ object MiBluetoothToastHook : HookContext() {
             address: String,
             context: Context,
             batteryParams: BatteryParams,
+            caseOpened: Boolean = false,
         ) {
             if (address.isBlank() || !isColorOsHost || address in officialPopupShownAddresses) return
             val bluetoothDevice = runCatching {
@@ -524,6 +543,12 @@ object MiBluetoothToastHook : HookContext() {
                 (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive == true
             val keyguardLocked =
                 (context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)?.isKeyguardLocked == true
+            if (caseOpened && (!colorOsPopupHostReady || !screenInteractive || keyguardLocked)) {
+                // 开盖只补官方卡片；息屏、锁屏或宿主未就绪时不再用横幅打扰。
+                officialPopupShownAddresses.add(address)
+                Log.d("HuaweiPods", "ColorOS case-open popup skipped host=$colorOsPopupHostReady screen=$screenInteractive locked=$keyguardLocked")
+                return
+            }
             if (!colorOsPopupHostReady) {
                 context.sendBroadcast(
                     Intent(HuaweiPodsAction.ACTION_COLOROS_POPUP_HOST_PROBE).apply {
@@ -709,9 +734,21 @@ object MiBluetoothToastHook : HookContext() {
                                     }
                                     createPodsNotification(device, context, batteryParams)
                                     if (isColorOsHost) {
+                                        val caseReported = batteryParams.case?.isConnected == true
+                                        val caseOpened = isColorOsCaseOpened(
+                                            previousCaseReported = lastCaseReported.put(address, caseReported),
+                                            caseReported = caseReported,
+                                        )
+                                        val now = android.os.SystemClock.elapsedRealtime()
+                                        if (caseOpened && shouldShowColorOsCaseOpenPopup(lastCaseOpenPopupAt[address], now)) {
+                                            // 与 OPPO 耳机一致：连接状态下打开充电盒再次弹出官方卡片。
+                                            lastCaseOpenPopupAt[address] = now
+                                            officialPopupShownAddresses.remove(address)
+                                            Log.i("HuaweiPods", "ColorOS case opened; requesting official popup")
+                                        }
                                         // ColorOS does not consistently emit the separate strong-toast request.
                                         // The first verified battery update is the reliable connected-device event.
-                                        showColorOsConnectionPopup(address, context, batteryParams)
+                                        showColorOsConnectionPopup(address, context, batteryParams, caseOpened)
                                     }
                                 }
                                 HuaweiPodsAction.ACTION_CANCEL_PODS_NOTIFICATION -> {
@@ -1014,6 +1051,8 @@ object MiBluetoothToastHook : HookContext() {
             activeNotificationAddresses.clear()
             disconnectedNotificationAddresses.clear()
             officialPopupShownAddresses.clear()
+            lastCaseReported.clear()
+            lastCaseOpenPopupAt.clear()
             FocusIslandUtil.closeForHotReload()
         }
     }

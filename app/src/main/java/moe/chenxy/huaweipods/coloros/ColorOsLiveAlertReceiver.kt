@@ -46,6 +46,14 @@ internal fun shouldAcceptColorOsLiveAlertBatteryUpdate(
     eventElapsed: Long,
 ): Boolean = lastDisconnectElapsed <= 0L || eventElapsed > lastDisconnectElapsed
 
+/** 记录断开时间：早于该时间的电量广播不会再把流体云拉起来。 */
+internal fun markColorOsLiveAlertDisconnected(context: Context, elapsedRealtime: Long) {
+    context.getSharedPreferences("coloros_live_alert_state", Context.MODE_PRIVATE).edit()
+        .putLong("last_disconnect_elapsed", elapsedRealtime)
+        .remove("current_address")
+        .apply()
+}
+
 internal fun NotificationCompat.Builder.requestColorOsLiveAlert(chipText: String?) = apply {
     // ColorOS 16 also supports promotion on API 36.0. AndroidX writes
     // the compatible extra without calling the platform's 36.1 setter.

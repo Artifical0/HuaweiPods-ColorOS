@@ -117,4 +117,19 @@ class MiBluetoothToastAncPolicyTest {
             assertFalse(route.name, shouldOfferNotificationAncAction(route))
         }
     }
+
+    @Test
+    fun `case opening is detected only after the case stopped reporting`() {
+        assertFalse(isColorOsCaseOpened(previousCaseReported = null, caseReported = true))
+        assertTrue(isColorOsCaseOpened(previousCaseReported = false, caseReported = true))
+        assertFalse(isColorOsCaseOpened(previousCaseReported = true, caseReported = true))
+        assertFalse(isColorOsCaseOpened(previousCaseReported = false, caseReported = false))
+    }
+
+    @Test
+    fun `case open popup is rate limited per device`() {
+        assertTrue(shouldShowColorOsCaseOpenPopup(lastCaseOpenPopupAt = null, now = 1_000L))
+        assertFalse(shouldShowColorOsCaseOpenPopup(lastCaseOpenPopupAt = 1_000L, now = 10_000L))
+        assertTrue(shouldShowColorOsCaseOpenPopup(lastCaseOpenPopupAt = 1_000L, now = 16_000L))
+    }
 }

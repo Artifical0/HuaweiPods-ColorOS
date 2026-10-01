@@ -16,11 +16,14 @@ import android.content.IntentFilter
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 
 /** Keeps the app process alive only while a connected-headset Fluid Cloud is active. */
 class ColorOsLiveAlertService : Service() {
     private var currentAddress: String? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val profileProxies = mutableMapOf<Int, BluetoothProfile>()
+    private var disconnectedChecks = 0
     private val bluetoothStateCheck = object : Runnable {
         override fun run() {
             val bluetoothEnabled = runCatching {
@@ -28,10 +31,51 @@ class ColorOsLiveAlertService : Service() {
             }.getOrDefault(true)
             if (!bluetoothEnabled) {
                 stopLiveAlert()
-            } else {
-                mainHandler.postDelayed(this, BLUETOOTH_STATE_CHECK_INTERVAL_MS)
+                return
+            }
+            // ColorOS 可能延迟或丢弃后台应用的断开广播；轮询音频连接状态兜底，连续两次断开才收起。
+            disconnectedChecks = if (isCurrentDeviceDisconnected()) disconnectedChecks + 1 else 0
+            if (disconnectedChecks >= 2) {
+                Log.i(TAG, "Live Alert stopped: headset no longer connected")
+                stopLiveAlert()
+                return
+            }
+            mainHandler.postDelayed(this, BLUETOOTH_STATE_CHECK_INTERVAL_MS)
+        }
+    }
+
+    private fun bindAudioProfiles() {
+        val adapter = runCatching { getSystemService(BluetoothManager::class.java)?.adapter }
+            .getOrNull() ?: return
+        listOf(BluetoothProfile.A2DP, BluetoothProfile.HEADSET).forEach { profile ->
+            runCatching {
+                adapter.getProfileProxy(
+                    this,
+                    object : BluetoothProfile.ServiceListener {
+                        override fun onServiceConnected(type: Int, proxy: BluetoothProfile) {
+                            profileProxies[type] = proxy
+                        }
+
+                        override fun onServiceDisconnected(type: Int) {
+                            profileProxies.remove(type)
+                        }
+                    },
+                    profile,
+                )
             }
         }
+    }
+
+    /** 两个音频 Profile 均已就绪且都不再连接当前耳机时才判定断开；状态未知时保持显示。 */
+    private fun isCurrentDeviceDisconnected(): Boolean {
+        val address = currentAddress ?: return false
+        if (profileProxies.size < 2) return false
+        return runCatching {
+            val device = getSystemService(BluetoothManager::class.java).adapter.getRemoteDevice(address)
+            profileProxies.values.all { proxy ->
+                proxy.getConnectionState(device) == BluetoothProfile.STATE_DISCONNECTED
+            }
+        }.getOrDefault(false)
     }
     private val bluetoothReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -78,6 +122,7 @@ class ColorOsLiveAlertService : Service() {
             },
             Context.RECEIVER_EXPORTED,
         )
+        bindAudioProfiles()
         mainHandler.post(bluetoothStateCheck)
     }
 
@@ -107,11 +152,15 @@ class ColorOsLiveAlertService : Service() {
     override fun onDestroy() {
         mainHandler.removeCallbacks(bluetoothStateCheck)
         runCatching { unregisterReceiver(bluetoothReceiver) }
+        val adapter = runCatching { getSystemService(BluetoothManager::class.java)?.adapter }.getOrNull()
+        profileProxies.forEach { (type, proxy) -> runCatching { adapter?.closeProfileProxy(type, proxy) } }
+        profileProxies.clear()
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
 
     private fun stopLiveAlert() {
+        markColorOsLiveAlertDisconnected(this, android.os.SystemClock.elapsedRealtime())
         getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -122,5 +171,6 @@ class ColorOsLiveAlertService : Service() {
         const val EXTRA_DEVICE_ADDRESS = "coloros_live_alert_device_address"
         const val NOTIFICATION_ID = 10005
         const val BLUETOOTH_STATE_CHECK_INTERVAL_MS = 2_000L
+        private const val TAG = "HuaweiPods-LiveAlert"
     }
 }
