@@ -982,10 +982,7 @@ private fun ReadyDetails(accent: Color) {
         SetupDivider()
         ReadyItem(
             "3",
-            stringResource(
-                R.string.onboarding_ready_group,
-                stringResource(R.string.qq_group_number),
-            ),
+            stringResource(R.string.onboarding_ready_group),
             accent,
         )
     }

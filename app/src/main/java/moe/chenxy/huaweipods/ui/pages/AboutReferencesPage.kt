@@ -108,6 +108,11 @@ private fun ReferenceGroup(
 
 private val integrationReferences = listOf(
     AboutReference(
+        name = "HuaweiPods · Nshpiter",
+        summaryRes = R.string.reference_huaweipods_upstream_summary,
+        url = "https://github.com/Nshpiter/HuaweiPods",
+    ),
+    AboutReference(
         name = "OppoPods · 1812z",
         summaryRes = R.string.reference_oppopods_fork_summary,
         url = "https://github.com/1812z/OppoPods",
