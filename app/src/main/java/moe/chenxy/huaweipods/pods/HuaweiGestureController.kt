@@ -260,6 +260,10 @@ object HuaweiGestureController {
         action: HuaweiTapAction,
         onComplete: ((Boolean) -> Unit)? = null,
     ) {
+        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7 && kind == HuaweiGestureKind.TRIPLE_TAP) {
+            HuaweiFreeBuds7Controller.setTripleTap(context, device, side, action) { onComplete?.invoke(it) }
+            return
+        }
         val packet = buildTapPacket(route, kind, side, action) ?: run {
             onComplete?.invoke(false)
             return
@@ -306,6 +310,8 @@ object HuaweiGestureController {
                 freeBuds4eLongPressQuery + freeClip2SwipeQuery
         } else if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP) {
             freeClip2DoubleTapQuery + freeClip2TripleTapQuery
+        } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7) {
+            freeClip2TripleTapQuery
         } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5) {
             freeClip2TripleTapQuery + freeClip2SwipeQuery
         } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
@@ -634,6 +640,7 @@ enum class HuaweiTapAction(val extraValue: String) {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I to HuaweiGestureKind.DOUBLE_TAP -> freeBuds7iDoubleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I to HuaweiGestureKind.TRIPLE_TAP -> freeBuds7iTripleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 to HuaweiGestureKind.TRIPLE_TAP -> freeBuds7iTripleTapActions
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS7 to HuaweiGestureKind.TRIPLE_TAP -> freeBuds7iTripleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEARC to HuaweiGestureKind.DOUBLE_TAP -> freeBuds7iDoubleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEARC to HuaweiGestureKind.TRIPLE_TAP -> freeBuds7iTripleTapActions
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2 to HuaweiGestureKind.DOUBLE_TAP -> eyewear2DoubleTapActions
@@ -685,6 +692,7 @@ enum class HuaweiTapAction(val extraValue: String) {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS7,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
             HuaweiDeviceRoute.HUAWEI_FREEARC,
             -> when (this) {

@@ -20,7 +20,7 @@ HuaweiPods ColorOS is an Android 15+ Xposed module with the independent applicat
 
 > The My Devices entry supports both the ColorOS 16.1 (`com.heytap.mydevices` 17.4.15) and ColorOS 17 (17.25.10) detail pages. The ColorOS 17 work was checked statically against OnePlus PLK110 `PLK110_17.0.0.102(CN01)` firmware and still needs on-device verification. Private hosts change between system updates; unknown builds fall back to the stock pages while keeping the module UI, Live Alerts, and the standard Bluetooth detail page.
 
-The unified build supports the 16 models below in one APK. Model-specific test APKs are no longer distributed.
+The unified build supports the 17 models below in one APK. Model-specific test APKs are no longer distributed.
 
 ## ColorOS 17 adaptation and native integration (1.8.3-coloros.1)
 
@@ -55,6 +55,7 @@ Versions from 1.8.1-coloros.2 use a stable release key and support in-place upda
 | HUAWEI FreeBuds Pro 3 | Extended support | Battery, three-mode control and readback, four ANC levels, voice transparency, long-press/pinch/swipe gestures, and low-latency auto-apply |
 | HUAWEI FreeBuds Pro 4 | Basic support | Battery and ANC/off; no verified ANC state readback or gesture settings |
 | HUAWEI FreeBuds Pro 5 | Extended support | Battery, three-mode readback, four ANC levels, standard/voice/adaptive transparency, triple-tap/pinch/swipe-volume gestures, wear detection, adaptive volume, head-motion and voice controls, spatial audio, nine Yuezhang/scene/AI sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device connection, case-open sound, and ear-tip material |
+| HUAWEI FreeBuds 7 | Extended support | Battery and official images, three ANC levels with readback, spatial audio, double/triple-tap, pinch and swipe settings, wear detection, eight sound effects, a 10-band EQ, high-quality audio, low latency, and selected smart settings; native Settings and fusion-center controls ([validation scope](docs/FREEBUDS7_ADAPTATION.md), Chinese) |
 | HUAWEI FreeBuds 7i | Extended support | Battery, transparency/ANC/off readback, four ANC levels, double/triple-tap, long-press and swipe-volume gestures, wear detection, head-motion control, spatial audio, four sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device list management, and official color images |
 | HUAWEI FreeClip | Extended support | Left/right/case battery, double/triple-tap gestures, wear detection, adaptive left/right earbuds, drop reminder, four official sound presets, and low-latency auto-apply; no traditional ANC or custom EQ |
 | HUAWEI FreeClip 2 | Extended support | Battery, double/triple-tap and swipe gestures, spatial audio, low-latency auto-apply, and selected wearing/audio settings; no traditional ANC |
