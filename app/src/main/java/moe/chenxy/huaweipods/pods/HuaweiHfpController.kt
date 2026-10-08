@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -18,6 +19,8 @@ import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.LowLatencyPrefs
 import moe.chenxy.huaweipods.hook.ColorOsSystemBatteryBridge
 import moe.chenxy.huaweipods.hook.Log
+import moe.chenxy.huaweipods.platform.RomFamily
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.smartaudio.OfficialImageIdentityBridge
 import moe.chenxy.huaweipods.utils.miuiStrongToast.MiuiStrongToastUtil
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
@@ -33,6 +36,8 @@ object HuaweiHfpController {
     private const val ANC_CONFIRM_DELAY_MS = 450L
     private const val ANC_REFRESH_MIN_INTERVAL_MS = 750L
     private const val BACKGROUND_BATTERY_REFRESH_INTERVAL_MS = 30_000L
+    /** ColorOS 的状态栏、设备空间直接读取系统电量通道，刷新更频繁才能及时反映电量变化。 */
+    private const val COLOR_OS_BACKGROUND_BATTERY_REFRESH_INTERVAL_MS = 15_000L
     private const val GESTURE_CONFIRM_DELAY_MS = 300L
     private const val GESTURE_REFRESH_MIN_INTERVAL_MS = 750L
     private const val EQUALIZER_CONFIRM_DELAY_MS = 450L
@@ -130,6 +135,23 @@ object HuaweiHfpController {
     private val lowLatencyAutoApplyRunnable = Runnable {
         applyAutoLowLatency()
     }
+    private val isColorOs: Boolean by lazy {
+        RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND) == RomFamily.COLOR_OS
+    }
+    private val backgroundBatteryRefreshIntervalMs: Long
+        get() = if (isColorOs) {
+            COLOR_OS_BACKGROUND_BATTERY_REFRESH_INTERVAL_MS
+        } else {
+            BACKGROUND_BATTERY_REFRESH_INTERVAL_MS
+        }
+    private var screenOnReceiverRegistered = false
+    /** 亮屏时向耳机读取一次电量，解锁后系统界面看到的是当前电量而不是旧缓存。 */
+    private val screenOnReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != Intent.ACTION_SCREEN_ON) return
+            if (device != null) requestPrivateBattery()
+        }
+    }
     private var backgroundBatteryRefreshActive = false
     private val backgroundBatteryRefreshRunnable = object : Runnable {
         override fun run() {
@@ -139,7 +161,7 @@ object HuaweiHfpController {
                 return
             }
             requestPrivateBattery()
-            mainHandler.postDelayed(this, BACKGROUND_BATTERY_REFRESH_INTERVAL_MS)
+            mainHandler.postDelayed(this, backgroundBatteryRefreshIntervalMs)
         }
     }
 
@@ -163,6 +185,10 @@ object HuaweiHfpController {
                 }
         }
         receiverRegistered = false
+        if (screenOnReceiverRegistered && receiverContext != null) {
+            runCatching { receiverContext.unregisterReceiver(screenOnReceiver) }
+        }
+        screenOnReceiverRegistered = false
         HuaweiL2capAncController.disconnect(device)
         context = null
         device = null
@@ -252,6 +278,8 @@ object HuaweiHfpController {
                         sendConnectionState("connected")
                         sendConnected(force = true)
                         currentBattery?.let { sendBattery(it, cached = currentBatteryIsCached) }
+                        // 我的设备 / 模块界面打开时读取耳机实时电量，而不只是重发缓存（受 10 秒限流）。
+                        if (isColorOs) requestPrivateBattery()
                         if (receivedIntent.getBooleanExtra(
                                 HuaweiPodsAction.EXTRA_RESTORE_NOTIFICATION,
                                 false,
@@ -1677,9 +1705,9 @@ object HuaweiHfpController {
         mainHandler.removeCallbacks(backgroundBatteryRefreshRunnable)
         mainHandler.postDelayed(
             backgroundBatteryRefreshRunnable,
-            BACKGROUND_BATTERY_REFRESH_INTERVAL_MS,
+            backgroundBatteryRefreshIntervalMs,
         )
-        Log.i(TAG, "Huawei background battery refresh started interval=$BACKGROUND_BATTERY_REFRESH_INTERVAL_MS")
+        Log.i(TAG, "Huawei background battery refresh started interval=$backgroundBatteryRefreshIntervalMs")
     }
 
     private fun stopBackgroundBatteryRefresh() {
@@ -2096,6 +2124,16 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_STATE)
         }, Context.RECEIVER_EXPORTED)
         receiverRegistered = true
+        if (isColorOs && !screenOnReceiverRegistered) {
+            runCatching {
+                ctx.registerReceiver(
+                    screenOnReceiver,
+                    IntentFilter(Intent.ACTION_SCREEN_ON),
+                    Context.RECEIVER_NOT_EXPORTED,
+                )
+            }.onSuccess { screenOnReceiverRegistered = true }
+                .onFailure { Log.w(TAG, "Screen-on battery refresh unavailable", it) }
+        }
     }
 
     private fun sendConnected(force: Boolean = false) {
