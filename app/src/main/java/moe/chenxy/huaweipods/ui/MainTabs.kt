@@ -503,6 +503,7 @@ private fun restartScopeOptionsForCurrentRom(): List<RestartScope> =
         RomFamily.COLOR_OS -> listOf(
             RestartScope("com.heytap.mydevices", R.string.restart_scope_my_devices),
             RestartScope("com.heytap.accessory", R.string.restart_scope_quick_connect),
+            RestartScope("com.oplus.wirelesssettings", R.string.restart_scope_wireless_settings),
         )
         RomFamily.GENERIC_ANDROID -> emptyList()
     }

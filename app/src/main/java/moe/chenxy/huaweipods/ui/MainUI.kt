@@ -204,6 +204,9 @@ internal fun MainUI(
     val lockscreenNotificationEnabled = remember {
         mutableStateOf(appConfig.lockscreenNotificationEnabled)
     }
+    val lowBatteryReminderEnabled = remember {
+        mutableStateOf(appConfig.lowBatteryReminderEnabled)
+    }
     val earphonePrefs = remember { mutableStateOf(PodImagePrefs.load(prefs)) }
     val checkUpdatesOnLaunch = remember {
         mutableStateOf(lifecyclePrefs.checkUpdatesOnLaunch())
@@ -1167,6 +1170,12 @@ internal fun MainUI(
                         onLockscreenNotificationEnabledChange = {
                             lockscreenNotificationEnabled.value = it
                             ConfigManager.updateLockscreenNotificationEnabled(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.android.bluetooth")
+                        },
+                        lowBatteryReminderEnabled = lowBatteryReminderEnabled,
+                        onLowBatteryReminderEnabledChange = {
+                            lowBatteryReminderEnabled.value = it
+                            ConfigManager.updateLowBatteryReminderEnabled(prefs, xposedService, it)
                             broadcastConfigChanged(context, "com.android.bluetooth")
                         },
                         appLanguage = appLanguage,

@@ -116,6 +116,9 @@
     <string name="transparency_voice">Enhance voices</string>
     <string name="lockscreen_notification">Lock screen notifications</string>
     <string name="lockscreen_notification_summary">Allow an enabled persistent headset notification to appear on the lock screen and AOD</string>
+    <string name="low_battery_reminder">Low earbud battery reminder</string>
+    <string name="low_battery_reminder_summary">Notify once when a connected earbud drops to 20% or below while not charging</string>
+    <string name="low_battery_reminder_title">%1$s battery low</string>
     <string name="persistent_notification">Persistent headset notification</string>
     <string name="persistent_notification_summary">Show headset connection status and battery in the notification shade</string>
     <string name="freeclip_adaptive_channels">Adaptive left/right earbuds</string>
@@ -132,6 +135,7 @@
     <string name="restart_scope_smart_audio">Smart Audio (spatial sync)</string>
     <string name="restart_scope_my_devices">My Devices (ColorOS headset detail)</string>
     <string name="restart_scope_quick_connect">Quick Device Connect (ColorOS popup)</string>
+    <string name="restart_scope_wireless_settings">Bluetooth settings (ColorOS earphone entry)</string>
     <string name="documentation_title">Documentation</string>
     <string name="documentation_load_failed">Documentation is unavailable</string>
     <string name="documentation_load_failed_summary">Check your connection and retry. Site pages stay in the app, while external links open in your browser.</string>

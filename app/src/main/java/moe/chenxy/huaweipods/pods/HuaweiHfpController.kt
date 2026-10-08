@@ -64,6 +64,9 @@ object HuaweiHfpController {
     private var currentBattery: BatteryParams? = null
     @Volatile
     private var currentBatteryIsCached = false
+    /** 耳机主动上报的整体入耳状态；null 表示本次会话尚未收到。 */
+    @Volatile
+    private var currentInEar: Boolean? = null
     @Volatile
     private var currentAnc = HuaweiAncState(NoiseControlMode.UNKNOWN)
     @Volatile
@@ -193,6 +196,7 @@ object HuaweiHfpController {
         device = null
         sessionRoute = HuaweiDeviceRoute.UNSUPPORTED
         currentBattery = null
+        currentInEar = null
         currentAnc = HuaweiAncState(NoiseControlMode.UNKNOWN)
         currentDeviceInfoIdentity = null
         connectedBroadcastSent = false
@@ -461,6 +465,7 @@ object HuaweiHfpController {
             }
             currentBattery = null
             currentBatteryIsCached = false
+            currentInEar = null
             currentAnc = HuaweiAncState(NoiseControlMode.UNKNOWN)
             currentAncIsCached = false
             currentAncLevel = 0
@@ -1367,6 +1372,7 @@ object HuaweiHfpController {
             mainHandler.removeCallbacks(freeClip2AudioConfirmationRunnable)
             cancelPendingSmartAudioSpatialWrite()
             cancelPendingSmartAudioAudioQuery()
+            currentInEar = null
             sessionGeneration++
             Log.i(
                 TAG,
@@ -1454,6 +1460,11 @@ object HuaweiHfpController {
                         )
                         Log.i(TAG, "Huawei RFCOMM battery updated device=$requestedAddress")
                     }
+                }
+            },
+            onInEar = { inEar ->
+                if (isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                    updateInEarState(inEar)
                 }
             },
             onComplete = { success ->
@@ -2180,7 +2191,7 @@ object HuaweiHfpController {
             val currentContext = context
             val currentDevice = device
             if (currentContext != null && currentDevice != null) {
-                ColorOsSystemBatteryBridge.publish(currentContext, currentDevice, battery)
+                ColorOsSystemBatteryBridge.publish(currentContext, currentDevice, battery, currentInEar)
             }
         }
         sendAppBroadcast(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED) {
@@ -2193,6 +2204,16 @@ object HuaweiHfpController {
             putBatteryExtras(battery)
             if (cached) putExtra(EXTRA_STATE_CACHED, true)
         }
+    }
+
+    private fun updateInEarState(inEar: Boolean) {
+        if (currentInEar == inEar) return
+        currentInEar = inEar
+        Log.i(TAG, "Huawei in-ear state changed inEar=$inEar device=${device?.address}")
+        val currentContext = context ?: return
+        val currentDevice = device ?: return
+        val battery = currentBattery?.takeUnless { currentBatteryIsCached } ?: return
+        ColorOsSystemBatteryBridge.publish(currentContext, currentDevice, battery, inEar)
     }
 
     private fun sendAnc(

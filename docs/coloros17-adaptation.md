@@ -55,14 +55,25 @@ ColorOS 17 蓝牙栈内置了面向 AirPods 与合作三方耳机的扩展能力
 
 **不声明任何可控特性**，特性掩码保持 0：系统不会尝试用 OBUDS AT 指令控制华为耳机，也不会触发三方耳机的回连、共享与查找逻辑。框架缺失时（如 ColorOS 16）只写入 Android 标准电量。
 
-## 后续：原生降噪控制与三方耳机卡片
+## 三方耳机能力的实际消费方（1.9.0-coloros.1 调研）
 
-要让“我的设备”和控制中心像 OPPO 耳机一样直接切换降噪，需要把华为耳机完整登记为三方耳机。已确认的接入点：
+对照 ColorOS 17 固件（蓝牙扩展 `oplus_bluetooth_common_ext.jar`、我的设备 17.25.10、快速设备连接 17.6.15、蓝牙设置、SystemUI）逐一核对了三方耳机框架各项能力由谁消费：
 
-- 设置厂商 / 产品 ID（`setOplusDeviceVendorAndProduct`），产品 ID 第 20～23 位为 1～3 时视为 TWS；
-- 声明特性与降噪模式（`setOplusDeviceFeatures`、`setOplusDeviceNoiseModeSupport`），状态变化时 `notifyNoiseModeChanged`；
-- Hook `OplusThirdPartyEarbudAtHandler.setExtendFeatureStatus` 与 `onHfpConnected`：华为设备不发 `+OBUDS` 握手，把系统下发的降噪 / 低时延指令翻译成华为协议；
-- 厂商白名单：蓝牙设置与 AT 处理器读取 `persist.bluetooth.3rd_earbuds_hfp_at_vendor`，我的设备与快速设备连接另有云端支持列表，需要逐一 Hook 或补充。
-- 我的设备已内置 AirPods 插件（`com.heytap.mydevices.plugin.airpods.core.AirpodsBluetoothManager`，含降噪模式切换与佩戴状态）和三方耳机扩展（特性开关 `oplus.software.bt.3rd_earbuds_extend`，按厂商 ID 获取资源的 `getThirdPartyHeadsetResUri`），是原生降噪卡片的现成载体。
+| 能力 | 系统消费方 | 华为耳机能否接入 |
+| --- | --- | --- |
+| 左右耳 / 盒电量（`getBatteryInfo`） | 蓝牙设置电量摘要、我的设备、快速设备连接 | 已接入（`TRANSPORT_HFP_AT` + `notifyBatteryLevelChanged`） |
+| 降噪模式（`notifyNoiseModeChanged` / `setExtendFeatureStatus(4, mode)`，1 关闭、2 降噪、3 通透、4 自适应） | 仅我的设备的 AirPods 插件有降噪界面；合作耳机详情页只有电量与查找响铃；SystemUI 无耳机降噪接口 | 登记为三方耳机也拿不到系统降噪按钮 |
+| 低电量提醒（`FEATURE_EXT_LOW_BATTERY_NOTIFY`=256） | 快速设备连接 `HeadSetConNetworking` 的低电量流体云胶囊 | 要求厂商 ID 在云端 `thirdHeadSetSupportList` 且有云端设备资源，华为耳机无法进入 |
+| 佩戴状态（`notifyWearStatusChanged`） | 系统据此决定是否展示盒电量；我的设备 / 快速设备连接仅对合作耳机使用 | 已接入 |
+| “耳机设置”入口与电量摘要 | 蓝牙设置：厂商 ID 在 `persist.bluetooth.3rd_earbuds_hfp_at_vendor` 白名单（缺省 0x0A80、0x054C、0x012D、0x07E0、0x0E66）时显示 | 在设置进程内对华为耳机放行，入口改开 HuaweiPods |
 
-这一步会改变多个系统应用对设备的判定，必须实机逐项验证（降噪按钮、佩戴状态、弹窗资源、回连与音频共享），因此本版未启用。
+另外，`OplusThirdPartyEarbudAtHandler` 会对白名单厂商（缺省 0x012D、0x054C）在 HFP 连接后主动发起 `+OBUDS` 握手，因此**不能**在蓝牙栈中给华为耳机登记这些厂商 ID。
+
+## 1.9.0-coloros.1 的原生化处理
+
+- **我的设备降噪切换**：在已接管的“HuaweiPods 电量与设置”入口下方加入关闭 / 降噪 / 通透三段切换（按机型能力显示），通过蓝牙进程的华为协议执行，状态随耳机回读同步。
+- **蓝牙设置**（新作用域 `com.oplus.wirelesssettings`）：仅在设置进程内让华为耳机通过三方耳机白名单判断，设备列表显示左右耳电量，详情页出现“耳机设置”，点击打开 HuaweiPods。不修改蓝牙栈中的设备属性。
+- **低电量提醒**：在线且未充电的耳机降到 20% 及以下时由蓝牙进程发出一次高优先级通知，充电或电量回升后重新布防；可在设置中关闭。
+- **佩戴状态**：解析耳机主动上报的入耳状态（服务 2B、命令 03，字段 08/09，1 为入耳；与 OpenFreebuds 一致），在 15 秒电量刷新时随回包读出，写入系统佩戴状态。协议只有整体入耳状态，不区分左右耳。
+
+以上均为固件静态分析结果，需实机验证。

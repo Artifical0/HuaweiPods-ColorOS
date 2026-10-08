@@ -13,6 +13,7 @@ data class AppConfig(
     val lockscreenNotificationEnabled: Boolean = true,
     val notificationClickAction: Int = ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
     val moreClickAction: Int = ConfigManager.MORE_CLICK_MODULE,
+    val lowBatteryReminderEnabled: Boolean = true,
 )
 
 object ConfigManager {
@@ -25,6 +26,7 @@ object ConfigManager {
     const val PREF_KEY_LOCKSCREEN_NOTIFICATION_ENABLED = "lockscreen_notification_enabled"
     const val PREF_KEY_NOTIFICATION_CLICK_ACTION = "notification_click_action"
     const val PREF_KEY_MORE_CLICK_ACTION = "more_click_action"
+    const val PREF_KEY_LOW_BATTERY_REMINDER_ENABLED = "low_battery_reminder_enabled"
     const val LOG_LEVEL_OFF = 0
     const val LOG_LEVEL_BASIC = 1
     const val LOG_LEVEL_DEBUG = 2
@@ -69,6 +71,8 @@ object ConfigManager {
 
     fun moreClickAction(): Int = current().moreClickAction.normalizedMoreClickAction()
 
+    fun lowBatteryReminderEnabled(): Boolean = current().lowBatteryReminderEnabled
+
     fun updateLogLevel(prefs: SharedPreferences, service: XposedService?, logLevel: Int) {
         val config = current().copy(logLevel = logLevel.coerceIn(LOG_LEVEL_OFF, LOG_LEVEL_DEBUG))
         save(prefs, service, config)
@@ -93,6 +97,14 @@ object ConfigManager {
     fun updateNotificationClickAction(prefs: SharedPreferences, service: XposedService?, action: Int) {
         val config = current().copy(notificationClickAction = action.normalizedNotificationClickAction())
         save(prefs, service, config)
+    }
+
+    fun updateLowBatteryReminderEnabled(
+        prefs: SharedPreferences,
+        service: XposedService?,
+        enabled: Boolean,
+    ) {
+        save(prefs, service, current().copy(lowBatteryReminderEnabled = enabled))
     }
 
     fun updateMoreClickAction(prefs: SharedPreferences, service: XposedService?, action: Int) {
@@ -141,6 +153,7 @@ object ConfigManager {
             .putBoolean(PREF_KEY_LOCKSCREEN_NOTIFICATION_ENABLED, config.lockscreenNotificationEnabled)
             .putInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, config.notificationClickAction)
             .putInt(PREF_KEY_MORE_CLICK_ACTION, config.moreClickAction)
+            .putBoolean(PREF_KEY_LOW_BATTERY_REMINDER_ENABLED, config.lowBatteryReminderEnabled)
             .commit()
     }
 
@@ -154,6 +167,7 @@ object ConfigManager {
         )
         val directNotificationClickAction = prefs.getInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, Int.MIN_VALUE)
         val directMoreClickAction = prefs.getInt(PREF_KEY_MORE_CLICK_ACTION, Int.MIN_VALUE)
+        val directLowBatteryReminderEnabled = prefs.booleanOrNull(PREF_KEY_LOW_BATTERY_REMINDER_ENABLED)
         val raw = prefs.getString(PREF_KEY_CONFIG_JSON, null)
         logPrefsSnapshot(source, prefs, raw)
         val config = raw?.let {
@@ -167,6 +181,7 @@ object ConfigManager {
                 ?: config.lockscreenNotificationEnabled,
             notificationClickAction = directNotificationClickAction.takeIf { it != Int.MIN_VALUE } ?: config.notificationClickAction,
             moreClickAction = directMoreClickAction.takeIf { it != Int.MIN_VALUE } ?: config.moreClickAction,
+            lowBatteryReminderEnabled = directLowBatteryReminderEnabled ?: config.lowBatteryReminderEnabled,
         ).normalized()
     }
 
@@ -231,6 +246,12 @@ object ConfigManager {
             }
             if (oldConfig.notificationClickAction != newConfig.notificationClickAction) {
                 add("notificationClickAction=${oldConfig.notificationClickAction}->${newConfig.notificationClickAction}")
+            }
+            if (oldConfig.lowBatteryReminderEnabled != newConfig.lowBatteryReminderEnabled) {
+                add(
+                    "lowBatteryReminderEnabled=${oldConfig.lowBatteryReminderEnabled}->" +
+                        newConfig.lowBatteryReminderEnabled,
+                )
             }
             if (oldConfig.moreClickAction != newConfig.moreClickAction) {
                 add("moreClickAction=${oldConfig.moreClickAction}->${newConfig.moreClickAction}")

@@ -8,7 +8,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -19,11 +25,14 @@ import java.util.Locale
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 import moe.chenxy.huaweipods.BuildConfig
+import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.displayName
 import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.pods.resolveHuaweiDeviceRoute
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 
 /**
  * ColorOS "My Devices" integration.
@@ -52,6 +61,7 @@ object ColorOsMyDevicesHook : HookContext() {
     private val activeRows = WeakHashMap<View, ColorOsHeadsetRow>()
     private val preferenceRows = WeakHashMap<Any, ColorOsHeadsetRow>()
     private val latestSummaries = ConcurrentHashMap<String, String>()
+    private val latestAncModes = ConcurrentHashMap<String, NoiseControlMode>()
     private val hookedBindMethods = ConcurrentHashMap.newKeySet<Method>()
 
     override fun onHook() {
@@ -80,6 +90,7 @@ object ColorOsMyDevicesHook : HookContext() {
         synchronized(activeRows) { activeRows.clear() }
         synchronized(preferenceRows) { preferenceRows.clear() }
         latestSummaries.clear()
+        latestAncModes.clear()
     }
 
     private fun hookLegacyDetailPage() {
@@ -156,9 +167,10 @@ object ColorOsMyDevicesHook : HookContext() {
         val entry = ColorOsHeadsetRow(
             address = device.address.uppercase(),
             deviceName = route.displayName,
+            route = route,
         )
         synchronized(activeRows) { activeRows[row] = entry }
-        customizeRow(row, entry.deviceName, latestSummaries[entry.address])
+        customizeRow(row, entry, latestSummaries[entry.address])
         row.setOnClickListener {
             launchHuaweiPods(row.context, device)
         }
@@ -187,6 +199,7 @@ object ColorOsMyDevicesHook : HookContext() {
             preferenceRows[preference] = ColorOsHeadsetRow(
                 address = device.address.uppercase(),
                 deviceName = route.displayName,
+                route = route,
             )
         }
         registerStatusReceiver(root.context)
@@ -198,12 +211,14 @@ object ColorOsMyDevicesHook : HookContext() {
         val itemView = getObjectField(holder, "itemView") as? View ?: return
         val entry = synchronized(preferenceRows) { preferenceRows[preference] }
         if (entry == null) {
-            // RecyclerView 复用了原来承载 HuaweiPods 入口的 View；系统绑定已恢复其文字和点击。
+            // RecyclerView 复用了原来承载 HuaweiPods 入口的 View；系统绑定已恢复其文字和点击，
+            // 只需移除注入的降噪切换。
             synchronized(activeRows) { activeRows.remove(itemView) }
+            removeAncControls(itemView)
             return
         }
         synchronized(activeRows) { activeRows[itemView] = entry }
-        customizeRow(itemView, entry.deviceName, latestSummaries[entry.address])
+        customizeRow(itemView, entry, latestSummaries[entry.address])
         val device = bluetoothDevice(entry.address) ?: return
         itemView.setOnClickListener { launchHuaweiPods(it.context, device) }
     }
@@ -237,7 +252,13 @@ object ColorOsMyDevicesHook : HookContext() {
         return null
     }
 
-    private fun customizeRow(row: View, deviceName: String, summary: String? = null) {
+    private fun customizeRow(row: View, entry: ColorOsHeadsetRow, summary: String? = null) {
+        customizeRowText(row, entry.deviceName, summary)
+        runCatching { attachAncControls(row, entry) }
+            .onFailure { Log.w(TAG, "Unable to attach noise control", it) }
+    }
+
+    private fun customizeRowText(row: View, deviceName: String, summary: String? = null) {
         row.isEnabled = true
         row.alpha = 1f
         row.contentDescription = "HuaweiPods, $deviceName"
@@ -275,10 +296,18 @@ object ColorOsMyDevicesHook : HookContext() {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val received = intent ?: return
-                if (
-                    HuaweiPodsAction.canonical(received.action) !=
-                    HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED
-                ) return
+                val action = HuaweiPodsAction.canonical(received.action)
+                if (action == HuaweiPodsAction.ACTION_PODS_ANC_CHANGED) {
+                    val address = received.getStringExtra("address")?.uppercase() ?: return
+                    val mode = NoiseControlMode.fromBroadcastStatus(received.getIntExtra("status", 0))
+                    if (!mode.isKnownMode()) return
+                    latestAncModes[address] = mode
+                    synchronized(activeRows) { activeRows.entries.toList() }
+                        .filter { (row, entry) -> row.isAttachedToWindow && entry.address == address }
+                        .forEach { (row, entry) -> updateAncControls(row, entry) }
+                    return
+                }
+                if (action != HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED) return
                 val address = received.getStringExtra("address")?.uppercase() ?: return
                 val summary = colorOsBatterySummary(
                     leftBattery = received.getIntExtra("left_battery", 0),
@@ -292,7 +321,7 @@ object ColorOsMyDevicesHook : HookContext() {
                 latestSummaries[address] = summary
                 synchronized(activeRows) { activeRows.entries.toList() }
                     .filter { (row, entry) -> row.isAttachedToWindow && entry.address == address }
-                    .forEach { (row, entry) -> customizeRow(row, entry.deviceName, summary) }
+                    .forEach { (row, entry) -> customizeRow(row, entry, summary) }
             }
         }
         runCatching {
@@ -300,6 +329,7 @@ object ColorOsMyDevicesHook : HookContext() {
                 receiver,
                 IntentFilter().apply {
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED)
+                    addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_ANC_CHANGED)
                 },
                 Context.RECEIVER_EXPORTED,
             )
@@ -313,12 +343,131 @@ object ColorOsMyDevicesHook : HookContext() {
 
     private fun requestCurrentStatus(context: Context) {
         runCatching {
-            context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
+            // 蓝牙进程按 sentFromPackage 校验控制广播，必须共享发送方身份。
+            context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
                 setPackage(BLUETOOTH_PACKAGE)
                 addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             })
         }.onFailure {
             Log.w(TAG, "Unable to request current headset status", it)
+        }
+    }
+
+    /**
+     * 在入口摘要下方加入降噪模式切换（关闭 / 降噪 / 通透）。ColorOS 的三方耳机详情页没有降噪控件，
+     * 这里在已接管的入口行内提供，与 AirPods 页面的三段式切换对应。摘要所在容器不是纵向
+     * LinearLayout 时不注入，保持系统原样。
+     */
+    private fun attachAncControls(row: View, entry: ColorOsHeadsetRow) {
+        val options = colorOsNoiseControlOptions(entry.route)
+        if (options.isEmpty()) return
+        val summary = row.findViewById<TextView>(android.R.id.summary)
+            ?: collectTextViews(row).getOrNull(1)
+            ?: return
+        val container = summary.parent as? LinearLayout ?: return
+        if (container.orientation != LinearLayout.VERTICAL) return
+        val existing = container.findViewWithTag<LinearLayout>(ANC_CONTROLS_TAG)
+        val controls = existing ?: LinearLayout(row.context).apply {
+            tag = ANC_CONTROLS_TAG
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = row.dp(8) }
+            container.addView(this)
+        }
+        if (controls.childCount != options.size) {
+            controls.removeAllViews()
+            options.forEachIndexed { index, mode ->
+                controls.addView(ancChip(row.context, mode, entry), LinearLayout.LayoutParams(
+                    0,
+                    row.dp(32),
+                    1f,
+                ).apply { if (index > 0) marginStart = row.dp(8) })
+            }
+        }
+        updateAncControls(row, entry)
+    }
+
+    private fun ancChip(context: Context, mode: NoiseControlMode, entry: ColorOsHeadsetRow): TextView =
+        TextView(context).apply {
+            tag = mode
+            gravity = Gravity.CENTER
+            maxLines = 1
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            text = ancLabel(mode)
+            isClickable = true
+            setOnClickListener { view ->
+                val device = bluetoothDevice(entry.address) ?: return@setOnClickListener
+                latestAncModes[entry.address] = mode
+                (view.parent?.parent as? View)?.let { updateAncControls(it, entry) }
+                requestAncMode(view.context, device, mode)
+            }
+        }
+
+    private fun updateAncControls(row: View, entry: ColorOsHeadsetRow) {
+        val controls = row.findViewWithTag<LinearLayout>(ANC_CONTROLS_TAG) ?: return
+        val selected = latestAncModes[entry.address]
+        val accent = row.context.themeColor(android.R.attr.colorAccent, Color.rgb(0x2A, 0x6D, 0xF4))
+        val normalText = row.context.themeColor(android.R.attr.textColorPrimary, Color.DKGRAY)
+        repeat(controls.childCount) { index ->
+            val chip = controls.getChildAt(index) as? TextView ?: return@repeat
+            val active = chip.tag == selected
+            chip.background = GradientDrawable().apply {
+                cornerRadius = row.dp(16).toFloat()
+                if (active) {
+                    setColor(accent)
+                } else {
+                    setColor(Color.TRANSPARENT)
+                    setStroke(row.dp(1), ColorStateList.valueOf(normalText).withAlpha(0x40))
+                }
+            }
+            chip.setTextColor(if (active) Color.WHITE else normalText)
+            chip.typeface = if (active) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            chip.isSelected = active
+        }
+    }
+
+    private fun removeAncControls(itemView: View) {
+        val controls = itemView.findViewWithTag<View>(ANC_CONTROLS_TAG) ?: return
+        (controls.parent as? ViewGroup)?.removeView(controls)
+    }
+
+    private fun requestAncMode(context: Context, device: BluetoothDevice, mode: NoiseControlMode) {
+        runCatching {
+            context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_ANC_SELECT).apply {
+                setPackage(BLUETOOTH_PACKAGE)
+                putExtra("address", device.address)
+                putExtra("status", mode.broadcastStatus)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            })
+            Log.i(TAG, "Noise control requested mode=$mode")
+        }.onFailure {
+            Log.w(TAG, "Unable to request noise control mode=$mode", it)
+        }
+    }
+
+    private fun ancLabel(mode: NoiseControlMode): String {
+        val chinese = Locale.getDefault().language == Locale.CHINESE.language
+        return when (mode) {
+            NoiseControlMode.OFF -> if (chinese) "关闭" else "Off"
+            NoiseControlMode.NOISE_CANCELLATION -> if (chinese) "降噪" else "Noise cancelling"
+            NoiseControlMode.TRANSPARENCY -> if (chinese) "通透" else "Awareness"
+            NoiseControlMode.UNKNOWN -> ""
+        }
+    }
+
+    private fun NoiseControlMode.isKnownMode(): Boolean = this != NoiseControlMode.UNKNOWN
+
+    private fun View.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun Context.themeColor(attr: Int, fallback: Int): Int {
+        val typedValue = TypedValue()
+        if (!theme.resolveAttribute(attr, typedValue, true)) return fallback
+        return if (typedValue.resourceId != 0) {
+            runCatching { getColor(typedValue.resourceId) }.getOrDefault(fallback)
+        } else {
+            typedValue.data
         }
     }
 
@@ -390,7 +539,10 @@ private fun isRecyclerViewHolderType(type: Class<*>): Boolean {
 private data class ColorOsHeadsetRow(
     val address: String,
     val deviceName: String,
+    val route: HuaweiDeviceRoute,
 )
+
+private const val ANC_CONTROLS_TAG = "huaweipods_noise_control"
 
 internal fun colorOsBatterySummary(
     leftBattery: Int,
