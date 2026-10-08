@@ -5,22 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import moe.chenxy.huaweipods.config.ConfigManager
 
 object SystemHeadsetSettingsIntent {
-    @Suppress("DEPRECATION")
     fun open(context: Context, device: BluetoothDevice): Boolean {
-        val candidates = when (
-            RomIntegrationPolicy.detect(
-                manufacturer = android.os.Build.MANUFACTURER,
-                brand = android.os.Build.BRAND,
-            )
-        ) {
-            RomFamily.HYPER_OS -> listOf(miuiIntent(device), aospDetailIntent(device))
-            RomFamily.COLOR_OS,
-            RomFamily.GENERIC_ANDROID,
-            -> listOf(aospDetailIntent(device), bluetoothSettingsIntent())
-        }
+        val candidates = listOf(aospDetailIntent(device), bluetoothSettingsIntent())
 
         return candidates.any { intent ->
             runCatching {
@@ -28,15 +16,6 @@ object SystemHeadsetSettingsIntent {
                 true
             }.getOrDefault(false)
         }
-    }
-
-    private fun miuiIntent(device: BluetoothDevice) = Intent().apply {
-        setClassName("com.android.settings", "com.android.settings.bluetooth.MiuiHeadsetActivity")
-        putExtra(BluetoothDevice.EXTRA_DEVICE, device)
-        putExtra("bluetoothaddress", device.address)
-        putExtra("MIUI_HEADSET_SUPPORT", ConfigManager.fakeSupport())
-        putExtra("COME_FROM", "MIUI_BLUETOOTH_SETTINGS")
-        putExtra("DEVICE_ID", ConfigManager.fakeDeviceId())
     }
 
     /**

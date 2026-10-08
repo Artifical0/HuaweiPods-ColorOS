@@ -194,15 +194,10 @@ internal fun MainUI(
     val prefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
     val lifecyclePrefs = remember(context) { AppLifecyclePrefs(context) }
     val appConfig = remember { ConfigManager.refreshFromPrefs(prefs) }
-    val milinkLowLatencyCardEnabled = remember {
-        mutableStateOf(appConfig.milinkLowLatencyCardEnabled)
-    }
     val notificationClickAction = remember { mutableStateOf(appConfig.notificationClickAction) }
     val moreClickAction = remember { mutableStateOf(appConfig.moreClickAction) }
     val desktopIconHidden = remember { mutableStateOf(isLauncherIconHidden(context)) }
     val logLevel = remember { mutableStateOf(appConfig.logLevel) }
-    val fakeDeviceId = remember { mutableStateOf(appConfig.fakeDeviceId) }
-    val islandMode = remember { mutableStateOf(ConfigManager.islandMode()) }
     val persistentNotificationEnabled = remember {
         mutableStateOf(appConfig.persistentNotificationEnabled)
     }
@@ -910,16 +905,11 @@ internal fun MainUI(
                     RootManager.restartPackages(packages)
                 }
                 val waitForBluetooth = "com.android.bluetooth" in packages
-                val observeMiBluetooth = "com.xiaomi.bluetooth" in packages
                 success = commandSucceeded
 
                 if (commandSucceeded && waitForBluetooth) {
                     lastBluetoothServiceAliveMs = 0L
                     bluetoothServiceResponsive = false
-                }
-                if (commandSucceeded && observeMiBluetooth) {
-                    // 通知进程可能按需启动，心跳仅用于观察，不阻断核心蓝牙重启。
-                    lastMiBluetoothServiceAliveMs = 0L
                 }
 
                 if (commandSucceeded && waitForBluetooth) {
@@ -932,7 +922,7 @@ internal fun MainUI(
                     success = lastBluetoothServiceAliveMs > 0L
                 }
 
-                if (success && (waitForBluetooth || observeMiBluetooth)) {
+                if (success && waitForBluetooth) {
                     // 新 Hook 就绪后只恢复一次；重启期间保留界面上最后一份有效状态。
                     context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
                         setPackage("com.android.bluetooth")
@@ -1166,59 +1156,34 @@ internal fun MainUI(
                             logLevel.value = it
                             ConfigManager.updateLogLevel(prefs, xposedService, it)
                             broadcastConfigChanged(context, "com.android.bluetooth")
-                            broadcastConfigChanged(context, "com.milink.service")
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
-                        },
-                        islandMode = islandMode,
-                        onIslandModeChange = {
-                            islandMode.value = it
-                            ConfigManager.updateIslandMode(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                         },
                         persistentNotificationEnabled = persistentNotificationEnabled,
                         onPersistentNotificationEnabledChange = {
                             persistentNotificationEnabled.value = it
                             ConfigManager.updatePersistentNotificationEnabled(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                            broadcastConfigChanged(context, "com.android.bluetooth")
                         },
                         lockscreenNotificationEnabled = lockscreenNotificationEnabled,
                         onLockscreenNotificationEnabledChange = {
                             lockscreenNotificationEnabled.value = it
                             ConfigManager.updateLockscreenNotificationEnabled(prefs, xposedService, it)
                             broadcastConfigChanged(context, "com.android.bluetooth")
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                         },
                         appLanguage = appLanguage,
                         onAppLanguageChange = {
                             appLanguage.value = it
                             onAppLanguageChange(it)
                         },
-                        milinkLowLatencyCardEnabled = milinkLowLatencyCardEnabled,
-                        onMilinkLowLatencyCardEnabledChange = {
-                            milinkLowLatencyCardEnabled.value = it
-                            ConfigManager.updateMilinkLowLatencyCardEnabled(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.milink.service")
-                        },
                         notificationClickAction = notificationClickAction,
                         onNotificationClickActionChange = {
                             notificationClickAction.value = it
                             ConfigManager.updateNotificationClickAction(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                            broadcastConfigChanged(context, "com.android.bluetooth")
                         },
                         moreClickAction = moreClickAction,
                         onMoreClickActionChange = {
                             moreClickAction.value = it
                             ConfigManager.updateMoreClickAction(prefs, xposedService, it)
-                        },
-                        fakeDeviceId = fakeDeviceId,
-                        onFakeDeviceIdChange = {
-                            fakeDeviceId.value = it
-                            ConfigManager.updateFakeDeviceId(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                            broadcastConfigChanged(context, "com.android.settings")
-                            broadcastConfigChanged(context, "com.milink.service")
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                         },
                         onOpenTheme = {
                             if (backStack.lastOrNull() != Screen.Theme) {
@@ -1449,12 +1414,10 @@ private fun resolvedConnectedAddress(vararg candidates: String?): String {
 }
 
 private fun sendBluetoothModuleBroadcast(context: Context, action: String) {
-    listOf("com.android.bluetooth", "com.xiaomi.bluetooth").forEach { packageName ->
-        Intent(action).apply {
-            setPackage(packageName)
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendIdentitySharingBroadcast(this)
-        }
+    Intent(action).apply {
+        setPackage("com.android.bluetooth")
+        addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        context.sendIdentitySharingBroadcast(this)
     }
 }
 

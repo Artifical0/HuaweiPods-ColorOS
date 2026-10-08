@@ -22,14 +22,8 @@ import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.os.Bundle
 import android.os.PowerManager
-import android.service.notification.StatusBarNotification
-import com.xzakota.hyper.notification.focus.FocusNotification
-import moe.chenxy.huaweipods.utils.FocusIslandUtil
 import moe.chenxy.huaweipods.utils.ModuleResourceResolver
 import moe.chenxy.huaweipods.utils.PodImageLoader
-import moe.chenxy.huaweipods.utils.SystemApisUtils
-import moe.chenxy.huaweipods.utils.SystemApisUtils.cancelAsUser
-import moe.chenxy.huaweipods.utils.SystemApisUtils.notifyAsUser
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 import moe.chenxy.huaweipods.config.NotificationPresentationPolicy
@@ -111,24 +105,15 @@ object MiBluetoothToastHook : HookContext() {
     private var colorOsHostReadyReceiver: BroadcastReceiver? = null
 
     override fun onHook() {
-        val isXiaomiHost = packageName == "com.xiaomi.bluetooth"
-        val isColorOsHost = !isXiaomiHost &&
+        val isColorOsHost =
             RomIntegrationPolicy.detect(android.os.Build.MANUFACTURER, android.os.Build.BRAND) ==
-            RomFamily.COLOR_OS
+                RomFamily.COLOR_OS
 
         fun cancelNotificationForAddress(address: String, context: Context) {
             if (address.isBlank()) return
             val notificationManager = context.getSystemService("notification") as NotificationManager
-            if (isXiaomiHost) {
-                notificationManager.cancelAsUser(
-                    "BTHeadset$address",
-                    10003,
-                    SystemApisUtils.getUserAllUserHandle(),
-                )
-            } else {
-                notificationManager.cancel("BTHeadset$address", 10003)
-                notificationManager.cancel("HuaweiPodsPopup$address", 10004)
-            }
+            notificationManager.cancel("BTHeadset$address", 10003)
+            notificationManager.cancel("HuaweiPodsPopup$address", 10004)
             activeNotificationAddresses.remove(address)
         }
 
@@ -150,13 +135,7 @@ object MiBluetoothToastHook : HookContext() {
                         (it.id == 10003 && it.tag?.startsWith("BTHeadset") == true) ||
                             (it.id == 10004 && it.tag?.startsWith("HuaweiPodsPopup") == true)
                     }
-                    .forEach {
-                        if (isXiaomiHost) {
-                            manager.cancelAsUser(it.tag, it.id, SystemApisUtils.getUserAllUserHandle())
-                        } else {
-                            manager.cancel(it.tag, it.id)
-                        }
-                    }
+                    .forEach { manager.cancel(it.tag, it.id) }
             }.onFailure {
                 Log.w("HuaweiPods", "Failed to scan disabled Pod Notifications", it)
             }
@@ -208,10 +187,6 @@ object MiBluetoothToastHook : HookContext() {
 
         @SuppressLint("WrongConstant")
         fun createPodsNotification(bluetoothDevice: BluetoothDevice?, context: Context, batteryParams: BatteryParams) {
-            val miheadset_notification_Box = context.resources.getIdentifier("miheadset_notification_Box", "string", "com.xiaomi.bluetooth")
-            val miheadset_notification_LeftEar = context.resources.getIdentifier("miheadset_notification_LeftEar", "string", "com.xiaomi.bluetooth")
-            val miheadset_notification_RightEar = context.resources.getIdentifier("miheadset_notification_RightEar", "string", "com.xiaomi.bluetooth")
-            val miheadset_notification_Disconnect = context.resources.getIdentifier("miheadset_notification_Disconnect", "string", "com.xiaomi.bluetooth")
             val system_notification_accent_color = context.resources.getIdentifier("system_notification_accent_color", "color", "android")
             if (bluetoothDevice == null) {
                 Log.e("HuaweiPods", "createPodsNotification: btDevice null")
@@ -236,7 +211,6 @@ object MiBluetoothToastHook : HookContext() {
                 if (!ModuleResourceResolver.isCurrentModuleBuild(context)) {
                     cancelNotificationForAddress(address, context)
                     Log.w("HuaweiPods", "skip notification: stale Hook build")
-                    FocusIslandUtil.cancelBatteryIsland(context)
                     return
                 }
                 val moduleResources = ModuleResourceResolver.resources(context) ?: run {
@@ -263,18 +237,10 @@ object MiBluetoothToastHook : HookContext() {
                 } else {
                     Notification.VISIBILITY_SECRET
                 }
-                val attachOfficialIsland = NotificationPresentationPolicy.attachesOfficialIsland(
-                    ConfigManager.islandMode(),
-                )
 
-                fun label(hostResourceId: Int, moduleResourceId: Int): String =
-                    hostResourceId.takeIf { it != 0 }
-                        ?.let { runCatching { context.resources.getString(it) }.getOrNull() }
-                        ?: moduleResources.getString(moduleResourceId)
-
-                val caseLabel = label(miheadset_notification_Box, R.string.pod_case)
-                val leftLabel = label(miheadset_notification_LeftEar, R.string.batt_left_pod)
-                val rightLabel = label(miheadset_notification_RightEar, R.string.batt_right_pod)
+                val caseLabel = moduleResources.getString(R.string.pod_case)
+                val leftLabel = moduleResources.getString(R.string.batt_left_pod)
+                val rightLabel = moduleResources.getString(R.string.batt_right_pod)
                 val caseBattStr = if (batteryParams.case != null && batteryParams.case!!.isConnected)
                     "$caseLabel${batteryParams.case!!.battery}%" +
                             "${if (batteryParams.case!!.isCharging) "⚡ " else " "}\n"
@@ -302,26 +268,6 @@ object MiBluetoothToastHook : HookContext() {
                         setLockscreenVisibility(lockscreenVisibility)
                     }
                 )
-                val bundle = Bundle()
-                bundle.putParcelable("Device", bluetoothDevice)
-                val intent = Intent("com.android.bluetooth.headset.notification")
-                intent.putExtra("btData", bundle)
-                intent.putExtra("disconnect", "1")
-                intent.setIdentifier(notificationIdentity)
-                val disconnectAction = if (isXiaomiHost && miheadset_notification_Disconnect != 0) {
-                    Notification.Action(
-                        285737079,
-                        context.resources.getString(miheadset_notification_Disconnect),
-                        PendingIntent.getBroadcast(
-                            context,
-                            0,
-                            intent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                        ),
-                    )
-                } else {
-                    null
-                }
                 val ancLabel = moduleResources.getString(R.string.cycle_anc)
                 val ancAction = if (offerAncAction) {
                     val ancCycleIntent = Intent(HuaweiPodsAction.ACTION_CYCLE_ANC).apply {
@@ -361,83 +307,10 @@ object MiBluetoothToastHook : HookContext() {
                 }
                 val headsetIcon = Icon.createWithBitmap(headsetBitmap)
                 val pendingIntent = popupPendingIntent(context, bluetoothDevice, deviceName)
-                val focusExtras = if (isXiaomiHost) FocusNotification.buildV3 {
-                    val logo = createPicture("key_headset", headsetIcon)
-                    enableFloat = attachOfficialIsland
-                    ticker = alias ?: ""
-                    updatable = true
-//                    tickerPic = logo
-
-                    iconTextInfo {
-                        animIconInfo{
-                            type = 0
-                            src = logo
-                        }
-                        title = alias ?: ""
-                        content = contentText
-                    }
-
-                    if (attachOfficialIsland) {
-                        island {
-                            islandProperty = 1
-                            bigIslandArea {
-                                imageTextInfoLeft {
-                                    type = 1
-                                    picInfo {
-                                        type = 1
-                                        pic = logo
-                                    }
-                                }
-                                imageTextInfoRight {
-                                    type = 2
-                                    textInfo {
-                                        title = alias ?: ""
-                                        content = contentText
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-
-                    textButton {
-                        ancAction?.let { notificationAction: Notification.Action ->
-                            addActionInfo {
-                                action = createAction("key_anc_cycle", notificationAction)
-                                actionTitle = ancLabel
-                            }
-                        }
-                        disconnectAction?.let { notificationAction ->
-                            addActionInfo {
-                                val disconnectLabel = moduleResources.getString(R.string.notification_btn_disconnect)
-                                action = createAction("key_disconnect", notificationAction)
-                                actionTitle = disconnectLabel
-                            }
-                        }
-                    }
-                } else Bundle()
-                if (attachOfficialIsland && ConfigManager.lockscreenNotificationEnabled()) {
-                    // AOD 息屏显示：左右耳电量拼合后注入 aodTitle。
-                    val aodParts = mutableListOf<String>()
-                    if (batteryParams.left?.isConnected == true)
-                        aodParts.add("L ${batteryParams.left!!.battery}%")
-                    if (batteryParams.right?.isConnected == true)
-                        aodParts.add("R ${batteryParams.right!!.battery}%")
-                    val aodTitle = aodParts.joinToString(" | ")
-                    try {
-                        val json = org.json.JSONObject(focusExtras.getString("miui.focus.param") ?: "{}")
-                        val pv2 = json.optJSONObject("param_v2") ?: org.json.JSONObject()
-                        pv2.put("aodTitle", aodTitle)
-                        pv2.put("aodPic", "key_headset")
-                        json.put("param_v2", pv2)
-                        focusExtras.putString("miui.focus.param", json.toString())
-                    } catch (_: Exception) {}
-                }
                 val notification = Notification.Builder(context, "BTHeadset$address")
                     .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
                     .setWhen(0L)
                     .setTicker(alias)
-                    .apply { if (isXiaomiHost) setDefaults(-1) }
                     .setContentTitle(alias)
                     .setContentText(contentText)
                     .setContentIntent(pendingIntent)
@@ -447,22 +320,11 @@ object MiBluetoothToastHook : HookContext() {
                             ?.let { context.getColor(it) }
                             ?: Color.rgb(0x33, 0x8A, 0xFF),
                     )
-                    .setOngoing(!isXiaomiHost)
+                    .setOngoing(true)
                     .apply { ancAction?.let { addAction(it) } }
-                    .apply { disconnectAction?.let { addAction(it) } }
-                    .addExtras(focusExtras)
                     .setVisibility(lockscreenVisibility)
                     .build()
-                if (isXiaomiHost) {
-                    notificationManager.notifyAsUser(
-                        "BTHeadset$address",
-                        10003,
-                        notification,
-                        SystemApisUtils.getUserAllUserHandle(),
-                    )
-                } else {
-                    notificationManager.notify("BTHeadset$address", 10003, notification)
-                }
+                notificationManager.notify("BTHeadset$address", 10003, notification)
                 activeNotificationAddresses.add(address)
             } catch (e: Exception) {
                 Log.e("HuaweiPods", "Failed to create Pod Notification", e)
@@ -643,7 +505,7 @@ object MiBluetoothToastHook : HookContext() {
         }
 
         fun registerNotificationReceiver(sourceContext: Context) {
-            // Application.attach() 的早期阶段 applicationContext 在部分 HyperOS 构建上仍可能为空。
+            // Application.attach() 的早期阶段 applicationContext 可能仍为空。
             // 使用传入的 Context 兜底，避免首次启动时漏注册通知更新接收器。
             val context = sourceContext.applicationContext ?: sourceContext
             synchronized(receiverRegistrationLock) {
@@ -675,41 +537,13 @@ object MiBluetoothToastHook : HookContext() {
                                     if (!ConfigManager.persistentNotificationEnabled()) {
                                         cancelAllPodsNotifications(context)
                                     }
-                                    if (ConfigManager.islandMode() != ConfigManager.ISLAND_MODE_MODULE) {
-                                        FocusIslandUtil.cancelBatteryIsland(context)
-                                    }
                                 }
                                 HuaweiPodsAction.ACTION_POD_IMAGES_CHANGED -> {
-                                    val refreshed = refreshActiveNotificationImages()
-                                    // 没有现存通知可替换时，才请求 Android 蓝牙进程使用当前
-                                    // 电量快照重建；避免对同一通知做两次无意义更新。
-                                    if (refreshed == 0) {
-                                        requestCurrentNotificationRestore(
-                                            context,
-                                            intent.getStringExtra("address"),
-                                        )
-                                    }
-                                }
-                                HuaweiPodsAction.ACTION_SEND_STRONG_TOAST -> {
-                                    if (ConfigManager.islandMode() != ConfigManager.ISLAND_MODE_MODULE) {
-                                        Log.d("HuaweiPods", "skip module island mode=${ConfigManager.islandMode()}")
-                                        return@runCatching
-                                    }
-                                    if (!ModuleResourceResolver.isCurrentModuleBuild(context)) {
-                                        Log.w("HuaweiPods", "skip focus island: stale Hook build")
-                                        FocusIslandUtil.cancelBatteryIsland(context)
-                                        return@runCatching
-                                    }
-                                    val batteryParams = intent.getParcelableExtra(
-                                        "batteryParams",
-                                        BatteryParams::class.java,
-                                    ) ?: return@runCatching
-                                    val address = intent.getStringExtra("address").orEmpty()
-                                    if (isXiaomiHost) {
-                                        FocusIslandUtil.showBatteryIsland(context, prefs, batteryParams, address)
-                                    } else {
-                                        showColorOsConnectionPopup(address, context, batteryParams)
-                                    }
+                                    // 请求蓝牙进程用当前电量快照重建通知，换上新图片。
+                                    requestCurrentNotificationRestore(
+                                        context,
+                                        intent.getStringExtra("address"),
+                                    )
                                 }
                                 HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION -> {
                                     val batteryParams = intent.getParcelableExtra(
@@ -822,7 +656,6 @@ object MiBluetoothToastHook : HookContext() {
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_UI_INIT)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONFIG_CHANGED)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_POD_IMAGES_CHANGED)
-                    addHuaweiPodsAction(HuaweiPodsAction.ACTION_SEND_STRONG_TOAST)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_CANCEL_PODS_NOTIFICATION)
                     addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
@@ -841,11 +674,8 @@ object MiBluetoothToastHook : HookContext() {
                         "notification receiver registered build=${BuildConfig.MODULE_BUILD_ID} " +
                             "receiver=${System.identityHashCode(broadcastReceiver)}",
                     )
-                    // API 102 不会重放连接事件。优先原位替换 USER_ALL 通知；旧代
-                    // 没留下通知时，再向 Android 蓝牙进程请求当前状态重建。
-                    if (refreshActiveNotificationImages() == 0) {
-                        requestCurrentNotificationRestore(context)
-                    }
+                    // API 102 不会重放连接事件，向蓝牙进程请求用当前状态重建通知。
+                    requestCurrentNotificationRestore(context)
                     if (isColorOsHost) {
                         val hostReadyReceiver = object : BroadcastReceiver() {
                             override fun onReceive(receiverContext: Context?, intent: Intent?) {
@@ -881,8 +711,7 @@ object MiBluetoothToastHook : HookContext() {
             }
         }
 
-        // HyperOS 4 不再保证 MiuiBluetoothNotification 会在连接阶段及时构造。接收器注册
-        // 绑定到 com.xiaomi.bluetooth 的 Application 生命周期，旧构造器 Hook 仅作为兼容兜底。
+        // 接收器注册绑定到宿主 Application 生命周期。
         hookAfter(
             Application::class.java.getDeclaredMethod("attach", Context::class.java).apply {
                 isAccessible = true
@@ -891,22 +720,6 @@ object MiBluetoothToastHook : HookContext() {
             if (Application.getProcessName() != packageName) return@hookAfter
             (args[0] as? Context)?.let(::registerNotificationReceiver)
         }
-        if (isXiaomiHost) {
-            runCatching {
-                hookConstructorAfter(
-                    findConstructorByParamCount(
-                        "com.android.bluetooth.ble.app.MiuiBluetoothNotification",
-                        2,
-                    ),
-                ) {
-                    (getObjectField(instance, "mContext") as? Context)
-                        ?.let(::registerNotificationReceiver)
-                }
-            }.onFailure {
-                Log.w("HuaweiPods", "legacy MiuiBluetoothNotification receiver hook skipped", it)
-            }
-        }
-
         // API 102 热重载不会重放 Application.attach()；直接复用当前 Application 恢复接收器。
         runCatching {
             val activityThread = Class.forName("android.app.ActivityThread")
@@ -928,87 +741,6 @@ object MiBluetoothToastHook : HookContext() {
             .getStringArrayList("active_notification_addresses")
             .orEmpty()
     }
-
-    /**
-     * 旧代可能没有可交接的电量快照，但现存通知本身仍保存着完整文案和操作。
-     * API 102 恢复时只原位替换焦点通知图片，避免为了换图要求用户重连耳机。
-     */
-    private fun refreshActiveNotificationImages(): Int {
-        val context = notificationReceiverContext ?: return 0
-        if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return 0
-        val notificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        return runCatching {
-            val allUsers = SystemApisUtils.getUserAllUserHandle()
-            val currentUserNotifications = runCatching {
-                notificationManager.activeNotifications.toList()
-            }.getOrDefault(emptyList())
-            val allUserNotifications = activeNotificationsForUserAll(context)
-            val activeNotifications = (currentUserNotifications + allUserNotifications)
-                .distinctBy(StatusBarNotification::getKey)
-            Log.i(
-                "HuaweiPods",
-                "API 102 notification image scan current=${currentUserNotifications.size} " +
-                    "all=${allUserNotifications.size} merged=${activeNotifications.size}",
-            )
-            var refreshed = 0
-            activeNotifications
-                .filter { statusBarNotification ->
-                    statusBarNotification.id == 10003 &&
-                        statusBarNotification.tag?.startsWith("BTHeadset") == true &&
-                        statusBarNotification.notification.extras
-                            ?.getString("miui.focus.param")
-                            ?.contains("com.xzakota.hyper.notification.focus.FocusNotification") == true
-                }
-                .forEach { statusBarNotification ->
-                    val tag = statusBarNotification.tag ?: return@forEach
-                    val address = tag.removePrefix("BTHeadset")
-                    val bitmap = PodImageLoader.loadBoxBitmap(context, prefs, address)
-                        ?: return@forEach
-                    val updatedNotification = statusBarNotification.notification.clone()
-                    val pictures = Bundle(
-                        updatedNotification.extras?.getBundle("miui.focus.pics") ?: Bundle(),
-                    ).apply {
-                        putParcelable("key_headset", Icon.createWithBitmap(bitmap))
-                    }
-                    updatedNotification.extras.putBundle("miui.focus.pics", pictures)
-                    notificationManager.notifyAsUser(
-                        tag,
-                        statusBarNotification.id,
-                        updatedNotification,
-                        allUsers,
-                    )
-                    activeNotificationAddresses += address
-                    refreshed += 1
-                    Log.i("HuaweiPods", "API 102 notification image refreshed device=$address")
-                }
-            refreshed
-        }.onFailure {
-            Log.w("HuaweiPods", "Failed to refresh active notification images", it)
-        }.getOrDefault(0)
-    }
-
-    /** 公开 API 固定查询当前用户，无法看到模块发布到 USER_ALL 的持久通知。 */
-    private fun activeNotificationsForUserAll(context: Context): List<StatusBarNotification> =
-        runCatching {
-            val getService = NotificationManager::class.java
-                .getDeclaredMethod("getService")
-                .apply { isAccessible = true }
-            val service = getService.invoke(null) ?: return@runCatching emptyList()
-            val getNotifications = service.javaClass.methods.firstOrNull { method ->
-                method.name == "getAppActiveNotifications" && method.parameterCount == 2
-            } ?: return@runCatching emptyList()
-            val parceledList = getNotifications.invoke(service, context.packageName, -1)
-                ?: return@runCatching emptyList()
-            val getList = parceledList.javaClass.methods.firstOrNull { method ->
-                method.name == "getList" && method.parameterCount == 0
-            } ?: return@runCatching emptyList()
-            (getList.invoke(parceledList) as? List<*>)
-                .orEmpty()
-                .filterIsInstance<StatusBarNotification>()
-        }.onFailure {
-            Log.w("HuaweiPods", "Failed to query USER_ALL active notifications", it)
-        }.getOrDefault(emptyList())
 
     private fun requestCurrentNotificationRestore(context: Context, address: String? = null) {
         context.sendBroadcast(
@@ -1053,7 +785,6 @@ object MiBluetoothToastHook : HookContext() {
             officialPopupShownAddresses.clear()
             lastCaseReported.clear()
             lastCaseOpenPopupAt.clear()
-            FocusIslandUtil.closeForHotReload()
         }
     }
 

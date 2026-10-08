@@ -8,7 +8,7 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)](https://android.com)
 [![LSPosed](https://img.shields.io/badge/Framework-LSPosed-blueviolet?style=flat-square)](https://github.com/LSPosed/LSPosed)
-[![HyperOS](https://img.shields.io/badge/ROM-HyperOS-orange?style=flat-square)](https://hyperos.mi.com)
+[![ColorOS](https://img.shields.io/badge/ROM-ColorOS-1BA784?style=flat-square)](https://www.coloros.com/)
 
 **English** | **[Simplified Chinese](README.md)**
 
@@ -16,11 +16,20 @@
 
 </div>
 
-HuaweiPods ColorOS is an Android 15+ Xposed module with the independent application ID `io.github.artifical0.huaweipods.coloros`, so the original HuaweiPods LSPosed marketplace entry cannot replace it. ColorOS integration includes the official Quick Device Connect popup, the My Devices headset-detail entry, the system earphone battery channel, and an Android 16+ Live Alert / Fluid Cloud battery card. HyperOS keeps the upstream system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page integration.
+HuaweiPods ColorOS is an Android 15+ Xposed module with the independent application ID `io.github.artifical0.huaweipods.coloros`, so the original HuaweiPods LSPosed marketplace entry cannot replace it. ColorOS integration includes the official Quick Device Connect popup, the My Devices headset-detail entry, the system earphone battery channel, and an Android 16+ Live Alert / Fluid Cloud battery card.
+
+> Starting with 1.9.0-coloros.1 this fork targets ColorOS only. The upstream Xiaomi / HyperOS integrations (system Bluetooth detail page, Super Island, Fusion Device Center, and so on) have been removed; HyperOS users should use upstream [HuaweiPods](https://github.com/Nshpiter/HuaweiPods).
 
 > The My Devices entry supports both the ColorOS 16.1 (`com.heytap.mydevices` 17.4.15) and ColorOS 17 (17.25.10) detail pages. The ColorOS 17 work was checked statically against OnePlus PLK110 `PLK110_17.0.0.102(CN01)` firmware and still needs on-device verification. Private hosts change between system updates; unknown builds fall back to the stock pages while keeping the module UI, Live Alerts, and the standard Bluetooth detail page.
 
 The unified build supports the 17 models below in one APK. Model-specific test APKs are no longer distributed.
+
+## 1.9.0-coloros.1
+
+- Syncs upstream HuaweiPods 1.9.0: adds HUAWEI FreeBuds 7.
+- **More responsive My Devices battery**: while earbuds are connected, battery is refreshed in the background every 15 seconds and immediately when the screen turns on.
+- **ColorOS only**: removes the Xiaomi / HyperOS hooks, scopes, settings, and dependencies (Super Island, focus notifications, Fusion Device Center, Xiaomi Bluetooth, the Settings detail page). LSPosed scopes are now Bluetooth, My Devices, Quick Device Connect, and optionally Huawei AI Life audio.
+- The About page now shows this fork's maintainer and lists the upstream project separately.
 
 ## ColorOS 17 adaptation and native integration (1.8.3-coloros.1)
 
@@ -55,7 +64,7 @@ Versions from 1.8.1-coloros.2 use a stable release key and support in-place upda
 | HUAWEI FreeBuds Pro 3 | Extended support | Battery, three-mode control and readback, four ANC levels, voice transparency, long-press/pinch/swipe gestures, and low-latency auto-apply |
 | HUAWEI FreeBuds Pro 4 | Basic support | Battery and ANC/off; no verified ANC state readback or gesture settings |
 | HUAWEI FreeBuds Pro 5 | Extended support | Battery, three-mode readback, four ANC levels, standard/voice/adaptive transparency, triple-tap/pinch/swipe-volume gestures, wear detection, adaptive volume, head-motion and voice controls, spatial audio, nine Yuezhang/scene/AI sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device connection, case-open sound, and ear-tip material |
-| HUAWEI FreeBuds 7 | Extended support | Battery and official images, three ANC levels with readback, spatial audio, double/triple-tap, pinch and swipe settings, wear detection, eight sound effects, a 10-band EQ, high-quality audio, low latency, and selected smart settings; native Settings and fusion-center controls ([validation scope](docs/FREEBUDS7_ADAPTATION.md), Chinese) |
+| HUAWEI FreeBuds 7 | Extended support | Battery and official images, three ANC levels with readback, spatial audio, double/triple-tap, pinch and swipe settings, wear detection, eight sound effects, a 10-band EQ, high-quality audio, low latency, and selected smart settings; protocol verified upstream on HyperOS ([validation scope](docs/FREEBUDS7_ADAPTATION.md), Chinese), not yet on ColorOS |
 | HUAWEI FreeBuds 7i | Extended support | Battery, transparency/ANC/off readback, four ANC levels, double/triple-tap, long-press and swipe-volume gestures, wear detection, head-motion control, spatial audio, four sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device list management, and official color images |
 | HUAWEI FreeClip | Extended support | Left/right/case battery, double/triple-tap gestures, wear detection, adaptive left/right earbuds, drop reminder, four official sound presets, and low-latency auto-apply; no traditional ANC or custom EQ |
 | HUAWEI FreeClip 2 | Extended support | Battery, double/triple-tap and swipe gestures, spatial audio, low-latency auto-apply, and selected wearing/audio settings; no traditional ANC |
@@ -64,19 +73,18 @@ Versions from 1.8.1-coloros.2 use a stable release key and support in-place upda
 | HUAWEI Eyewear 2 | Basic support | Left/right temple battery, double-tap/swipe gestures, and low-latency auto-apply; no ANC |
 | HUAWEI Eyewear 3 | Basic support | Protocol-model identification, left/right temple battery, system eyewear classification, and official color images; no ANC |
 
-The table lists currently integrated capabilities. Unlisted official features should not be assumed to work, and behavior can vary by earbud firmware, HyperOS version, and system component version.
+The table lists currently integrated capabilities. Unlisted official features should not be assumed to work, and behavior can vary by earbud firmware, ColorOS version, and system component version.
 
 ## Features
 
 - **Battery display** for earbuds, charging cases, or the left/right temples of supported eyewear.
 - **Model-aware controls** for ANC, transparency, ANC levels, and gestures where verified protocol data is available.
 - **ANC dial** for FreeBuds 3 spatial noise cancellation adjustment only.
-- **System Bluetooth detail page** integration for battery and controls supported by the selected model.
-- **Super Island / popup** status display and quick ANC controls.
-- **ColorOS Quick Device Connect and Fluid Cloud** with left, right, and case battery levels on Android 16+.
-- Independent switches for lock-screen headset notifications and all Super Island notifications.
+- **ColorOS Quick Device Connect popup** on connection and when the case is opened, plus **Fluid Cloud** with left, right, and case battery levels on Android 16+.
+- **System earphone battery channel**: the status bar, Bluetooth settings, and My Devices show left, right, and case battery levels.
+- **My Devices** headset detail page shows HuaweiPods battery and a settings entry.
+- Independent switches for the persistent headset notification and lock-screen notifications.
 - Notification taps can open the module popup, system settings, or Huawei Smart Audio; verified models can toggle low latency in the popup.
-- **Fusion Device Center** headset display and transfer between paired devices, with an optional low-latency quick card on verified legacy hosts.
 - **Manual model binding** by Bluetooth address when a device has been renamed or cannot be identified automatically.
 - **First-run setup guide** and in-app GitHub release checks.
 - **Standalone About page** for version details, updates, feedback, and community access, with full settings available from its top-right action.
@@ -85,7 +93,7 @@ The table lists currently integrated capabilities. Unlisted official features sh
 
 ## Requirements
 
-- Xiaomi / Redmi HyperOS or OPPO / OnePlus / realme ColorOS device.
+- OPPO / OnePlus / realme device running ColorOS 16 / 17.
 - Android 15+.
 - LSPosed API version >= 101 (API 102 frameworks additionally hot-reload updates).
 - A paired device listed in the support table above.
@@ -95,16 +103,15 @@ The table lists currently integrated capabilities. Unlisted official features sh
 1. Install the HuaweiPods APK and follow the first-run guide to check LSPosed and the core scopes.
 2. Enable the module in LSPosed.
 3. Select the scopes for your system:
-   - ColorOS: `com.android.bluetooth`, `com.heytap.mydevices`, and `com.heytap.accessory` (`com.heytap.accessory` enables the system Quick Device Connect popup; `com.android.settings` is optional for the standard Bluetooth detail page).
-   - Full HyperOS integration: `com.android.bluetooth`, `com.android.settings`, `com.milink.service`, and `com.xiaomi.bluetooth`.
+   - Required: `com.android.bluetooth`, `com.heytap.mydevices`, and `com.heytap.accessory` (`com.heytap.accessory` enables the system Quick Device Connect popup).
    - Optional: `com.huawei.smartaudio` (when Huawei AI Life/Smart Audio is installed, for FreeClip 2 spatial-audio and custom-EQ synchronization).
 4. Reboot the phone, or restart the scoped apps from HuaweiPods.
 5. On ColorOS 16+, open **ColorOS Fluid Cloud** in HuaweiPods settings and enable **Live alerts** in the system notification settings.
-6. Connect a supported device and view its capabilities in HuaweiPods. HyperOS also provides Super Island, Fusion Device Center, and the integrated system Bluetooth page. Modern models are identified from their protocol identity; if a renamed or legacy device is not identified, select its actual model once in HuaweiPods.
+6. Connect a supported device and view its capabilities in HuaweiPods. Battery also appears in My Devices and Fluid Cloud. Modern models are identified from their protocol identity; if a renamed or legacy device is not identified, select its actual model once in HuaweiPods.
 
 The release build no longer needs to install, run, or hook HUAWEI AI Life Audio for official images. Modern models provide the model and color identity over Bluetooth; legacy models can browse the verified Huawei color catalog in the image settings and ask the user to confirm once. Failures always fall back to cached or bundled images and never guess the default color.
 
-The Fusion Device Center low-latency card is enabled only on verified legacy hosts and can be disabled in HuaweiPods settings; on HyperOS 4, use the module popup or detail page instead. Version 1.8.3 fixes a popup issue where a successful FreeBuds 6i low-latency write was not saved and the switch appeared off when reopened. Because the protocol has no reliable readback for this setting, the UI shows the last successful write that will be reapplied after reconnection rather than a live device-reported state. The effect on the earbuds still needs device testing.
+Toggle low latency from the module popup or detail page. Version 1.8.3 fixes a popup issue where a successful FreeBuds 6i low-latency write was not saved and the switch appeared off when reopened. Because the protocol has no reliable readback for this setting, the UI shows the last successful write that will be reapplied after reconnection rather than a live device-reported state. The effect on the earbuds still needs device testing.
 
 ## Development Notes
 

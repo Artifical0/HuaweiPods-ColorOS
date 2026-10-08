@@ -119,7 +119,6 @@ dependencies {
     implementation(libs.navigation3.runtime)
 
     // HyperOS Focus Island API
-    implementation(libs.focus.api)
 }
 
 configurations.matching { it.name.startsWith("release") }.configureEach {

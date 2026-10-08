@@ -23,35 +23,28 @@ enum class BroadcastActionDomain {
 /**
  * 跨进程广播信任策略。
  *
- * HuaweiPods 需要在 App、Bluetooth 宿主进程 (com.android.bluetooth)、系统设置 (com.android.settings)、
- * 智慧音频 (com.huawei.smartaudio) 和负一屏等进程之间传递状态与控制指令。
+ * HuaweiPods 需要在 App、Bluetooth 宿主进程 (com.android.bluetooth)、我的设备 (com.heytap.mydevices)、
+ * 快速设备连接 (com.heytap.accessory) 和智慧音频 (com.huawei.smartaudio) 之间传递状态与控制指令。
  * 所有跨进程接收端均采用严格 fail-closed 原则按 Action Domain 校验发送方包名。
  */
 object HuaweiPodsBroadcastTrustPolicy {
     const val PACKAGE_APP = "io.github.artifical0.huaweipods.coloros"
     const val PACKAGE_BLUETOOTH = "com.android.bluetooth"
-    const val PACKAGE_SETTINGS = "com.android.settings"
     const val PACKAGE_SMART_AUDIO = "com.huawei.smartaudio"
-    const val PACKAGE_MILINK = "com.milink.service"
     const val PACKAGE_HEYTAP_ACCESSORY = "com.heytap.accessory"
     const val PACKAGE_HEYTAP_MYDEVICES = "com.heytap.mydevices"
-    const val PACKAGE_XIAOMI_BLUETOOTH = "com.xiaomi.bluetooth"
 
-    /** 受信任的控制广播发送方（包括应用自身及被 Hook 的系统/设备设置组件） */
+    /** 受信任的控制广播发送方（包括应用自身及被 Hook 的 ColorOS 系统组件） */
     private val trustedAppControlSenders = setOf(
         PACKAGE_APP,
-        PACKAGE_SETTINGS,
-        PACKAGE_MILINK,
         PACKAGE_BLUETOOTH,
         PACKAGE_HEYTAP_ACCESSORY,
         PACKAGE_HEYTAP_MYDEVICES,
-        PACKAGE_XIAOMI_BLUETOOTH,
     )
 
     /** 受信任的蓝牙底层状态广播发送方（由系统蓝牙进程发往各 UI 与宿主） */
     private val trustedBluetoothStateSenders = setOf(
         PACKAGE_BLUETOOTH,
-        PACKAGE_XIAOMI_BLUETOOTH,
     )
 
     /** 判断是否为合法的控制类广播发送者 */
@@ -115,7 +108,6 @@ object HuaweiPodsBroadcastTrustPolicy {
             HuaweiPodsAction.ACTION_COLOROS_POPUP_HOST_READY,
             HuaweiPodsAction.ACTION_PODS_MAC_RECEIVED,
             HuaweiPodsAction.ACTION_SHOW_PODS_UI,
-            HuaweiPodsAction.ACTION_SEND_STRONG_TOAST,
             HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION,
             HuaweiPodsAction.ACTION_CANCEL_PODS_NOTIFICATION ->
                 BroadcastActionDomain.BLUETOOTH_STATE

@@ -90,7 +90,6 @@ object HuaweiHfpController {
     private var lowLatencyAutoApplyRequest: LowLatencyAutoApplyRequest? = null
     private var lowLatencyAppliedGeneration: Long? = null
     private val freeClip2AudioStateTracker = FreeClip2AudioStateTracker()
-    private val batteryIslandTriggerPolicy = BatteryIslandTriggerPolicy()
     private val freeBuds3SnapshotStore = FreeBuds3StateSnapshotStore()
     private val sessionStateLock = Any()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -122,7 +121,7 @@ object HuaweiHfpController {
         /*
          * “已受理”只表示智慧音频调用了异步查询 API。设备页未创建时，官方 API
          * 可能不会经过 SpatialAudioWidget.setSpatialAudioState()，因而没有任何状态
-         * 回调。此处是只读查询，超时后必须直接向耳机核实，否则 Settings/MiLink
+         * 回调。此处是只读查询，超时后必须直接向耳机核实，否则系统界面
          * 会永久停留在各自的旧缓存。空间音频写入仍沿用下方更保守的冲突策略。
          */
         Log.i(
@@ -528,7 +527,6 @@ object HuaweiHfpController {
             sendConnected()
             sendBattery(battery)
             MiuiStrongToastUtil.showPodsNotificationByMiuiBt(context, battery, device)
-            maybeShowBatteryIsland(context, battery, device)
             Log.i(TAG, "Huawei battery parsed device=${device.address} values=${result.values}")
             battery
         }
@@ -1369,7 +1367,6 @@ object HuaweiHfpController {
             mainHandler.removeCallbacks(freeClip2AudioConfirmationRunnable)
             cancelPendingSmartAudioSpatialWrite()
             cancelPendingSmartAudioAudioQuery()
-            batteryIslandTriggerPolicy.onNewSession()
             sessionGeneration++
             Log.i(
                 TAG,
@@ -1455,7 +1452,6 @@ object HuaweiHfpController {
                             normalizedBattery,
                             activeDevice,
                         )
-                        maybeShowBatteryIsland(currentContext, normalizedBattery, activeDevice)
                         Log.i(TAG, "Huawei RFCOMM battery updated device=$requestedAddress")
                     }
                 }
@@ -1750,28 +1746,6 @@ object HuaweiHfpController {
         backgroundBatteryRefreshActive = false
         batteryRequestInFlight = false
         mainHandler.removeCallbacks(backgroundBatteryRefreshRunnable)
-    }
-
-    private fun maybeShowBatteryIsland(
-        context: Context,
-        battery: BatteryParams,
-        device: BluetoothDevice,
-    ) {
-        if (ConfigManager.islandMode() != ConfigManager.ISLAND_MODE_MODULE) return
-        val hasConnectedEarBattery = battery.left?.isConnected == true || battery.right?.isConnected == true
-        if (!batteryIslandTriggerPolicy.shouldTrigger(
-                address = device.address,
-                hasConnectedEarBattery = hasConnectedEarBattery,
-                now = SystemClock.elapsedRealtime(),
-            )
-        ) return
-        runCatching {
-            MiuiStrongToastUtil.showPodsBatteryToastByMiuiBt(context, battery, device)
-        }.onSuccess {
-            Log.i(TAG, "Huawei battery island requested device=${device.address}")
-        }.onFailure {
-            Log.e(TAG, "Huawei battery island request failed safely device=${device.address}", it)
-        }
     }
 
     private fun requestAncState(
@@ -2368,9 +2342,6 @@ object HuaweiHfpController {
         val ctx = context ?: return
         val currentDevice = device
         listOf(
-            "com.milink.service",
-            "com.xiaomi.bluetooth",
-            "com.android.settings",
             "com.heytap.mydevices",
         ).forEach { targetPackage ->
             Intent(action).apply {

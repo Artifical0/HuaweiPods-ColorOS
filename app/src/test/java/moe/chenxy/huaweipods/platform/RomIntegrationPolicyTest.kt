@@ -13,9 +13,9 @@ class RomIntegrationPolicyTest {
     }
 
     @Test
-    fun `detects HyperOS family brands`() {
-        listOf("Xiaomi", "Redmi", "POCO").forEach { brand ->
-            assertEquals(brand, RomFamily.HYPER_OS, RomIntegrationPolicy.detect(brand, brand))
+    fun `treats every other ROM as generic Android`() {
+        listOf("Xiaomi", "Redmi", "Google", "samsung").forEach { brand ->
+            assertEquals(brand, RomFamily.GENERIC_ANDROID, RomIntegrationPolicy.detect(brand, brand))
         }
     }
 
@@ -37,14 +37,10 @@ class RomIntegrationPolicyTest {
     }
 
     @Test
-    fun `routes notifications to the ROM Bluetooth host`() {
-        assertEquals(
-            RomIntegrationPolicy.XIAOMI_BLUETOOTH_PACKAGE,
-            RomIntegrationPolicy.notificationHostPackage(RomFamily.HYPER_OS),
-        )
+    fun `routes notifications to the system Bluetooth process`() {
         assertEquals(
             RomIntegrationPolicy.BLUETOOTH_PACKAGE,
-            RomIntegrationPolicy.notificationHostPackage(RomFamily.COLOR_OS),
+            RomIntegrationPolicy.notificationHostPackage(),
         )
     }
 }

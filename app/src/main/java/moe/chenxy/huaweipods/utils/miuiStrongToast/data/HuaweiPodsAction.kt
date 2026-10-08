@@ -45,7 +45,6 @@ object HuaweiPodsAction {
     const val FREECLIP2_AUDIO_KIND_SOUND_EFFECT = "sound_effect"
 
     const val ACTION_SHOW_PODS_UI = PREFIX + ".show_pods_ui"
-    const val ACTION_SEND_STRONG_TOAST = PREFIX + ".sendstrongtoast"
     const val ACTION_UPDATE_PODS_NOTIFICATION = PREFIX + ".updatepodsnotification"
     const val ACTION_CANCEL_PODS_NOTIFICATION = PREFIX + ".cancelpodsnotification"
 
