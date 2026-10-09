@@ -82,4 +82,43 @@ class ColorOsNativeEarbudPolicyTest {
         assertEquals(COLOR_OS_SETTINGS_DEFAULT_3RD_VENDORS, colorOsSettingsThirdPartyVendors("  "))
         assertEquals(listOf(0x0A80, 0x054C), colorOsSettingsThirdPartyVendors("0A80, 054c,zz"))
     }
+
+    @Test
+    fun `quick toggles only list verified controls`() {
+        assertEquals(
+            listOf(ColorOsQuickToggle.LOW_LATENCY, ColorOsQuickToggle.WEAR_DETECTION),
+            colorOsQuickToggles(HuaweiDeviceRoute.HUAWEI_FREECLIP),
+        )
+        assertTrue(colorOsQuickToggles(HuaweiDeviceRoute.HUAWEI_FREEBUDS3).isEmpty())
+        assertTrue(colorOsQuickToggles(HuaweiDeviceRoute.HUAWEI_FREEARC).isEmpty())
+    }
+
+    @Test
+    fun `quick toggle label shows state or pending readback`() {
+        assertEquals("佩戴检测 · 已开启", colorOsQuickToggleLabel(ColorOsQuickToggle.WEAR_DETECTION, true, chinese = true))
+        assertEquals("低时延 · 已关闭", colorOsQuickToggleLabel(ColorOsQuickToggle.LOW_LATENCY, false, chinese = true))
+        assertEquals("佩戴检测 · 读取中", colorOsQuickToggleLabel(ColorOsQuickToggle.WEAR_DETECTION, null, chinese = true))
+        assertEquals("Wear detection · On", colorOsQuickToggleLabel(ColorOsQuickToggle.WEAR_DETECTION, true, chinese = false))
+    }
+
+    @Test
+    fun `connection card battery text lists connected parts with charging marks`() {
+        val battery = BatteryParams(
+            left = PodParams(battery = 80, isConnected = true),
+            right = PodParams(battery = 78, isCharging = true, isConnected = true),
+            case = PodParams(battery = 60, isConnected = true),
+        )
+        assertEquals("左耳 80% · 右耳 78%⚡ · 耳机盒 60%", colorOsPopupBatteryText(battery, chinese = true))
+        assertEquals(
+            "L 80%",
+            colorOsPopupBatteryText(BatteryParams(left = PodParams(battery = 80, isConnected = true)), chinese = false),
+        )
+    }
+
+    @Test
+    fun `connection card only refreshes shortly after it was shown`() {
+        assertTrue(shouldRefreshColorOsConnectionCard(shownAtElapsed = 1_000L, nowElapsed = 20_000L))
+        assertFalse(shouldRefreshColorOsConnectionCard(shownAtElapsed = 1_000L, nowElapsed = 1_000L + COLOR_OS_CONNECTION_CARD_LIVE_WINDOW_MS + 1))
+        assertFalse(shouldRefreshColorOsConnectionCard(shownAtElapsed = 5_000L, nowElapsed = 1_000L))
+    }
 }

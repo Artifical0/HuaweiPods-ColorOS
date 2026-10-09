@@ -47,6 +47,7 @@ object HuaweiHfpController {
     private const val FREECLIP2_AUDIO_REFRESH_MIN_INTERVAL_MS = 2_500L
     private const val DEVICE_INFO_REFRESH_MIN_INTERVAL_MS = 60_000L
     private const val LOW_LATENCY_AUTO_APPLY_DELAY_MS = 2_500L
+    private const val WEAR_DETECTION_CONFIRM_DELAY_MS = 300L
     private const val LOW_LATENCY_AUTO_APPLY_RETRY_DELAY_MS = 2_500L
     private const val LOW_LATENCY_AUTO_APPLY_MAX_ATTEMPTS = 2
     private const val FREEBUDS3_SNAPSHOT_TTL_MS = 10 * 60_000L
@@ -359,6 +360,14 @@ object HuaweiHfpController {
                 HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET -> {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
                     setLowLatency(receivedIntent)
+                }
+                HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_SET -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
+                    setWearDetection(receivedIntent)
+                }
+                HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_REFRESH -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = false)) return
+                    requestWearDetectionState()
                 }
                 HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND -> {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
@@ -1844,6 +1853,93 @@ object HuaweiHfpController {
         }
     }
 
+    /**
+     * “我的设备”等外部入口的佩戴检测开关。会话已确认机型，直接使用抓包验证过的 2B10 写入与
+     * 2B11 回读；写入后以回读结果为准再广播，避免界面显示假成功。
+     */
+    private fun setWearDetection(intent: Intent) {
+        val currentContext = context ?: return
+        val currentDevice = device ?: return
+        val requestedRoute = sessionRoute
+        val packet = if (intent.hasExtra(HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED)) {
+            HuaweiWearDetectionController.setPacket(
+                requestedRoute,
+                intent.getBooleanExtra(HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED, false),
+            )
+        } else {
+            null
+        }
+        if (packet == null) {
+            Log.w(TAG, "Huawei wear-detection command ignored route=$requestedRoute")
+            return
+        }
+        val requestedEnabled = intent.getBooleanExtra(
+            HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED,
+            false,
+        )
+        val requestedAddress = currentDevice.address
+        val requestedGeneration = sessionGeneration
+        HuaweiL2capAncController.sendRawPacketOnce(
+            context = currentContext,
+            device = currentDevice,
+            route = requestedRoute,
+            packet = packet,
+            description = "wear-detection enabled=$requestedEnabled route=$requestedRoute",
+        ) { success ->
+            if (!isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                return@sendRawPacketOnce
+            }
+            if (!success) {
+                Log.w(TAG, "Huawei wear-detection write failed device=$requestedAddress")
+                requestWearDetectionState(writeExpected = requestedEnabled)
+                return@sendRawPacketOnce
+            }
+            mainHandler.postDelayed({
+                if (isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                    requestWearDetectionState(writeExpected = requestedEnabled)
+                }
+            }, WEAR_DETECTION_CONFIRM_DELAY_MS)
+        }
+    }
+
+    private fun requestWearDetectionState(writeExpected: Boolean? = null) {
+        val currentContext = context ?: return
+        val currentDevice = device ?: return
+        val requestedRoute = sessionRoute
+        val packet = HuaweiWearDetectionController.stateQueryPacket(requestedRoute) ?: return
+        val requestedAddress = currentDevice.address
+        val requestedGeneration = sessionGeneration
+        HuaweiL2capAncController.requestRawPacketOnce(
+            context = currentContext,
+            device = currentDevice,
+            route = requestedRoute,
+            packet = packet,
+            description = "wear-detection-state route=$requestedRoute",
+            responseComplete = { HuaweiWearDetectionController.parseState(it) != null },
+        ) { response ->
+            if (!isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                return@requestRawPacketOnce
+            }
+            val enabled = HuaweiWearDetectionController.parseState(response) ?: run {
+                Log.w(TAG, "Huawei wear-detection state unavailable device=$requestedAddress")
+                return@requestRawPacketOnce
+            }
+            sendWearDetectionState(enabled, writeSuccess = writeExpected?.let { it == enabled })
+            Log.i(TAG, "Huawei wear-detection state confirmed enabled=$enabled device=$requestedAddress")
+        }
+    }
+
+    private fun sendWearDetectionState(enabled: Boolean, writeSuccess: Boolean? = null) {
+        val fillState: Intent.() -> Unit = {
+            putExtra(HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED, enabled)
+            writeSuccess?.let {
+                putExtra(HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_WRITE_SUCCESS, it)
+            }
+        }
+        sendAppBroadcast(HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_CHANGED, fillState)
+        sendExternalBroadcast(HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_CHANGED, fillState)
+    }
+
     private fun setHuaweiEqualizerPreset(intent: Intent) {
         val currentContext = context ?: return
         val currentDevice = device ?: return
@@ -2131,6 +2227,8 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_SET)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_REFRESH)
             if (BuildConfig.DEBUG) {
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND)
             }

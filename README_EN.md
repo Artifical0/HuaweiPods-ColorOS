@@ -86,7 +86,8 @@ The table lists currently integrated capabilities. Unlisted official features sh
 - **ANC dial** for FreeBuds 3 spatial noise cancellation adjustment only.
 - **ColorOS Quick Device Connect popup** on connection and when the case is opened, plus **Fluid Cloud** with left, right, and case battery levels on Android 16+.
 - **System earphone battery channel**: the status bar, Bluetooth settings, and My Devices show left, right, and case battery levels.
-- **My Devices** headset detail page shows HuaweiPods battery, a settings entry, and noise-control or low-latency quick controls.
+- **My Devices** headset detail page shows HuaweiPods battery, a settings entry, and noise-control, low-latency and wear-detection quick controls.
+- **Fluid Cloud** card offers a one-tap low-latency toggle on supported models; the **Quick Connect** card shows left / right / case battery and refreshes while visible.
 - **System Bluetooth settings** show left/right battery and an earphone-settings entry; low-battery reminders.
 - Independent switches for the persistent headset notification and lock-screen notifications.
 - Notification taps can open the module popup, system settings, or Huawei Smart Audio; verified models can toggle low latency in the popup.

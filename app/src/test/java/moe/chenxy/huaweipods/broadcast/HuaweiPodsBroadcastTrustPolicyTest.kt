@@ -30,6 +30,8 @@ class HuaweiPodsBroadcastTrustPolicyTest {
             HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_SET,
             HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH,
             HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET,
+            HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_SET,
+            HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_REFRESH,
             HuaweiPodsAction.ACTION_HUAWEI_GESTURE_SET,
             HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_SET,
             HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_PRESET_SET,

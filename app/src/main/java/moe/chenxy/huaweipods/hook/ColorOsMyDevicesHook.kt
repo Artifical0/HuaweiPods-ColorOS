@@ -13,6 +13,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -26,6 +27,7 @@ import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.HuaweiWearDetectionController
 import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.displayName
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
@@ -65,6 +67,7 @@ object ColorOsMyDevicesHook : HookContext() {
     private val latestSummaries = ConcurrentHashMap<String, String>()
     private val latestAncModes = ConcurrentHashMap<String, NoiseControlMode>()
     private val latestLowLatency = ConcurrentHashMap<String, Boolean>()
+    private val latestWearDetection = ConcurrentHashMap<String, Boolean>()
     private val hookedBindMethods = ConcurrentHashMap.newKeySet<Method>()
 
     override fun onHook() {
@@ -95,6 +98,7 @@ object ColorOsMyDevicesHook : HookContext() {
         latestSummaries.clear()
         latestAncModes.clear()
         latestLowLatency.clear()
+        latestWearDetection.clear()
     }
 
     private fun hookLegacyDetailPage() {
@@ -180,6 +184,7 @@ object ColorOsMyDevicesHook : HookContext() {
         }
         registerStatusReceiver(row.context)
         requestCurrentStatus(row.context)
+        requestWearDetectionState(row.context, device, route)
         Log.i(TAG, "Attached entry for ${route.displayName}")
     }
 
@@ -208,6 +213,7 @@ object ColorOsMyDevicesHook : HookContext() {
         }
         registerStatusReceiver(root.context)
         requestCurrentStatus(root.context)
+        requestWearDetectionState(root.context, device, route)
         Log.i(TAG, "Attached preference entry for ${route.displayName}")
     }
 
@@ -319,6 +325,16 @@ object ColorOsMyDevicesHook : HookContext() {
                     refreshQuickControls(address)
                     return
                 }
+                if (action == HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_CHANGED) {
+                    val address = received.getStringExtra("address")?.uppercase() ?: return
+                    if (!received.hasExtra(HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED)) return
+                    latestWearDetection[address] = received.getBooleanExtra(
+                        HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED,
+                        false,
+                    )
+                    refreshQuickControls(address)
+                    return
+                }
                 if (action != HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED) return
                 val address = received.getStringExtra("address")?.uppercase() ?: return
                 val summary = colorOsBatterySummary(
@@ -343,6 +359,7 @@ object ColorOsMyDevicesHook : HookContext() {
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_ANC_CHANGED)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED)
+                    addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_CHANGED)
                 },
                 Context.RECEIVER_EXPORTED,
             )
@@ -368,19 +385,19 @@ object ColorOsMyDevicesHook : HookContext() {
 
     /**
      * 在入口摘要下方加入按机型能力显示的快捷控制：降噪耳机为关闭 / 降噪 / 通透三段切换（ColorOS
-     * 只给 AirPods 提供降噪控件），支持低时延的型号另有低时延开关。摘要所在容器不是纵向
+     * 只给 AirPods 提供降噪控件），支持的型号另有低时延与佩戴检测开关。摘要所在容器不是纵向
      * LinearLayout 时不注入，保持系统原样。
      */
     private fun attachQuickControls(row: View, entry: ColorOsHeadsetRow) {
         val ancOptions = colorOsNoiseControlOptions(entry.route)
-        val lowLatency = entry.route.supportsLowLatencyControl
-        if (ancOptions.isEmpty() && !lowLatency) return
+        val toggles = colorOsQuickToggles(entry.route)
+        if (ancOptions.isEmpty() && toggles.isEmpty()) return
         val summary = row.findViewById<TextView>(android.R.id.summary)
             ?: collectTextViews(row).getOrNull(1)
             ?: return
         val container = summary.parent as? LinearLayout ?: return
         if (container.orientation != LinearLayout.VERTICAL) return
-        val expectedChips = ancOptions.size + if (lowLatency) 1 else 0
+        val expectedChips = ancOptions.size + toggles.size
         val existing = container.findViewWithTag<LinearLayout>(QUICK_CONTROLS_TAG)
         if (existing == null || existing.chipCount() != expectedChips) {
             existing?.let(container::removeView)
@@ -402,16 +419,13 @@ object ColorOsMyDevicesHook : HookContext() {
                     }
                 }))
             }
-            if (lowLatency) {
-                controls.addView(chipRow(row, listOf(
-                    quickChip(row.context, LOW_LATENCY_CHIP_TAG, lowLatencyLabel()) { view ->
+            if (toggles.isNotEmpty()) {
+                controls.addView(chipRow(row, toggles.map { toggle ->
+                    quickChip(row.context, toggle, toggleLabel(toggle, null)) { view ->
                         val device = bluetoothDevice(entry.address) ?: return@quickChip
-                        val enabled = latestLowLatency[entry.address] != true
-                        latestLowLatency[entry.address] = enabled
-                        refreshQuickControls(entry.address)
-                        requestLowLatency(view.context, device, entry.route, enabled)
-                    },
-                )).apply {
+                        onToggleClicked(view.context, device, entry, toggle)
+                    }
+                }).apply {
                     if (ancOptions.isNotEmpty()) {
                         (layoutParams as LinearLayout.LayoutParams).topMargin = row.dp(8)
                     }
@@ -445,6 +459,7 @@ object ColorOsMyDevicesHook : HookContext() {
         tag = key
         gravity = Gravity.CENTER
         maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
         text = label
         isClickable = true
@@ -463,17 +478,15 @@ object ColorOsMyDevicesHook : HookContext() {
     private fun updateQuickControls(row: View, entry: ColorOsHeadsetRow) {
         val controls = row.findViewWithTag<LinearLayout>(QUICK_CONTROLS_TAG) ?: return
         val selectedAnc = latestAncModes[entry.address]
-        val lowLatencyEnabled = latestLowLatency[entry.address] == true
         val accent = row.context.themeColor(android.R.attr.colorAccent, Color.rgb(0x2A, 0x6D, 0xF4))
         val normalText = row.context.themeColor(android.R.attr.textColorPrimary, Color.DKGRAY)
         repeat(controls.childCount) { rowIndex ->
             val chipRow = controls.getChildAt(rowIndex) as? ViewGroup ?: return@repeat
             repeat(chipRow.childCount) { index ->
                 val chip = chipRow.getChildAt(index) as? TextView ?: return@repeat
-                val active = when (chip.tag) {
-                    LOW_LATENCY_CHIP_TAG -> lowLatencyEnabled
-                    else -> chip.tag == selectedAnc
-                }
+                val toggle = chip.tag as? ColorOsQuickToggle
+                val toggleState = toggle?.let { toggleState(entry.address, it) }
+                val active = if (toggle != null) toggleState == true else chip.tag == selectedAnc
                 chip.background = GradientDrawable().apply {
                     cornerRadius = row.dp(16).toFloat()
                     if (active) {
@@ -486,7 +499,7 @@ object ColorOsMyDevicesHook : HookContext() {
                 chip.setTextColor(if (active) Color.WHITE else normalText)
                 chip.typeface = if (active) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
                 chip.isSelected = active
-                if (chip.tag == LOW_LATENCY_CHIP_TAG) chip.text = lowLatencyLabel(active)
+                if (toggle != null) chip.text = toggleLabel(toggle, toggleState)
             }
         }
     }
@@ -525,6 +538,54 @@ object ColorOsMyDevicesHook : HookContext() {
         }
     }
 
+    private fun toggleState(address: String, toggle: ColorOsQuickToggle): Boolean? = when (toggle) {
+        // 低时延没有回读协议，未收到状态时按关闭显示（与模块界面的默认值一致）。
+        ColorOsQuickToggle.LOW_LATENCY -> latestLowLatency[address] ?: false
+        ColorOsQuickToggle.WEAR_DETECTION -> latestWearDetection[address]
+    }
+
+    private fun onToggleClicked(
+        context: Context,
+        device: BluetoothDevice,
+        entry: ColorOsHeadsetRow,
+        toggle: ColorOsQuickToggle,
+    ) {
+        when (toggle) {
+            ColorOsQuickToggle.LOW_LATENCY -> {
+                val enabled = latestLowLatency[entry.address] != true
+                latestLowLatency[entry.address] = enabled
+                refreshQuickControls(entry.address)
+                requestLowLatency(context, device, entry.route, enabled)
+            }
+            ColorOsQuickToggle.WEAR_DETECTION -> {
+                // 状态未知时先回读，避免按猜测的状态写反。
+                val current = latestWearDetection[entry.address] ?: run {
+                    requestWearDetectionState(context, device, entry.route)
+                    return
+                }
+                latestWearDetection[entry.address] = !current
+                refreshQuickControls(entry.address)
+                runCatching {
+                    sendControl(context, HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_SET, device, entry.route) {
+                        putExtra(HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED, !current)
+                    }
+                    Log.i(TAG, "Wear detection requested enabled=${!current}")
+                }.onFailure {
+                    Log.w(TAG, "Unable to request wear detection enabled=${!current}", it)
+                }
+            }
+        }
+    }
+
+    private fun requestWearDetectionState(context: Context, device: BluetoothDevice, route: HuaweiDeviceRoute) {
+        if (!HuaweiWearDetectionController.supports(route)) return
+        runCatching {
+            sendControl(context, HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_REFRESH, device, route) {}
+        }.onFailure {
+            Log.w(TAG, "Unable to request wear detection state", it)
+        }
+    }
+
     private fun requestLowLatency(
         context: Context,
         device: BluetoothDevice,
@@ -551,15 +612,8 @@ object ColorOsMyDevicesHook : HookContext() {
         }
     }
 
-    private fun lowLatencyLabel(enabled: Boolean = false): String {
-        val chinese = Locale.getDefault().language == Locale.CHINESE.language
-        return when {
-            chinese && enabled -> "低时延 · 已开启"
-            chinese -> "低时延 · 已关闭"
-            enabled -> "Low latency · On"
-            else -> "Low latency · Off"
-        }
-    }
+    private fun toggleLabel(toggle: ColorOsQuickToggle, enabled: Boolean?): String =
+        colorOsQuickToggleLabel(toggle, enabled, Locale.getDefault().language == Locale.CHINESE.language)
 
     private fun NoiseControlMode.isKnownMode(): Boolean = this != NoiseControlMode.UNKNOWN
 
@@ -647,7 +701,6 @@ private data class ColorOsHeadsetRow(
 )
 
 private const val QUICK_CONTROLS_TAG = "huaweipods_quick_controls"
-private const val LOW_LATENCY_CHIP_TAG = "huaweipods_low_latency"
 
 internal fun colorOsBatterySummary(
     leftBattery: Int,

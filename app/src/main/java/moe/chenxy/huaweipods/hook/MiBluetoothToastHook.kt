@@ -38,6 +38,7 @@ import moe.chenxy.huaweipods.pods.supportsAnc
 import moe.chenxy.huaweipods.platform.RomFamily
 import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.PodParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
@@ -87,6 +88,31 @@ internal fun shouldDelegateColorOsNotificationToApp(
 ): Boolean = isColorOsHost && appCanPostNotifications
 
 @SuppressLint("MissingPermission")
+internal const val COLOR_OS_CONNECTION_CARD_LIVE_WINDOW_MS = 45_000L
+
+/** 连接卡片只在弹出后的短时间内跟随电量刷新；之后视为已关闭，不再向快速设备连接发送更新。 */
+internal fun shouldRefreshColorOsConnectionCard(shownAtElapsed: Long, nowElapsed: Long): Boolean =
+    nowElapsed - shownAtElapsed in 0..COLOR_OS_CONNECTION_CARD_LIVE_WINDOW_MS
+
+/** 连接卡片的电量文字：左耳 · 右耳 · 耳机盒，充电中的部件带闪电标记。 */
+internal fun colorOsPopupBatteryText(battery: BatteryParams, chinese: Boolean): String = buildList {
+    fun label(pod: PodParams, name: String) = "$name ${pod.battery.coerceIn(0, 100)}%${if (pod.isCharging) "⚡" else ""}"
+    battery.left?.takeIf { it.isConnected }?.let { add(label(it, if (chinese) "左耳" else "L")) }
+    battery.right?.takeIf { it.isConnected }?.let { add(label(it, if (chinese) "右耳" else "R")) }
+    battery.case?.takeIf { it.isConnected }?.let { add(label(it, if (chinese) "耳机盒" else "Case")) }
+}.joinToString(" · ")
+
+private data class ColorOsLiveConnectionCard(
+    val shownAtElapsed: Long,
+    val deviceName: String,
+    val imageFileName: String?,
+    val fallbackDrawableName: String?,
+    val batteryText: String,
+)
+
+private fun isChineseLocale(): Boolean =
+    java.util.Locale.getDefault().language == java.util.Locale.CHINESE.language
+
 object MiBluetoothToastHook : HookContext() {
 
     // ANC 模式本地缓存，用于在 FreeBuds 3 已验证的关/开状态之间切换。
@@ -96,6 +122,7 @@ object MiBluetoothToastHook : HookContext() {
     private val officialPopupShownAddresses = ConcurrentHashMap.newKeySet<String>()
     private val lastCaseReported = ConcurrentHashMap<String, Boolean>()
     private val lastCaseOpenPopupAt = ConcurrentHashMap<String, Long>()
+    private val liveConnectionCards = ConcurrentHashMap<String, ColorOsLiveConnectionCard>()
     private val lowBatteryTracker = ColorOsLowBatteryTracker()
     @Volatile
     private var latestBatteryUpdate: Pair<BluetoothDevice, BatteryParams>? = null
@@ -123,6 +150,7 @@ object MiBluetoothToastHook : HookContext() {
         fun clearConnectionPopupState(address: String) {
             officialPopupShownAddresses.remove(address)
             lastCaseReported.remove(address)
+            liveConnectionCards.remove(address)
         }
 
         fun cancelAllPodsNotifications(context: Context) {
@@ -477,6 +505,29 @@ object MiBluetoothToastHook : HookContext() {
             postLowBatteryReminder(context, device, levels, preview = true)
         }
 
+        /** 连接卡片显示期间，电量（含左右耳出入盒导致的充电状态）变化时同步刷新卡片文字。 */
+        fun refreshColorOsConnectionCard(address: String, context: Context, batteryParams: BatteryParams) {
+            val card = liveConnectionCards[address] ?: return
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (!shouldRefreshColorOsConnectionCard(card.shownAtElapsed, now)) {
+                liveConnectionCards.remove(address, card)
+                return
+            }
+            val batteryText = colorOsPopupBatteryText(batteryParams, isChineseLocale())
+            if (batteryText.isBlank() || batteryText == card.batteryText) return
+            if (ColorOsAccessoryPopupBridge.updateConnected(
+                    context = context,
+                    deviceName = card.deviceName,
+                    batteryText = batteryText,
+                    imageFileName = card.imageFileName,
+                    fallbackDrawableName = card.fallbackDrawableName,
+                )
+            ) {
+                liveConnectionCards[address] = card.copy(batteryText = batteryText)
+                Log.d("HuaweiPods", "ColorOS connection card battery refreshed")
+            }
+        }
+
         fun showColorOsConnectionPopup(
             address: String,
             context: Context,
@@ -545,18 +596,7 @@ object MiBluetoothToastHook : HookContext() {
                     )
                 }.getOrNull()
             }
-            val batteryText = buildList {
-                batteryParams.left?.takeIf { it.isConnected }?.let {
-                    add("L ${it.battery}%${if (it.isCharging) "⚡" else ""}")
-                }
-                batteryParams.right?.takeIf { it.isConnected }?.let {
-                    add("R ${it.battery}%${if (it.isCharging) "⚡" else ""}")
-                }
-                batteryParams.case?.takeIf { it.isConnected }?.let {
-                    val label = moduleResources?.getString(R.string.pod_case) ?: "Case"
-                    add("$label ${it.battery}%${if (it.isCharging) "⚡" else ""}")
-                }
-            }.joinToString("  ")
+            val batteryText = colorOsPopupBatteryText(batteryParams, isChineseLocale())
             val imageFileName = runCatching {
                 PodImagePrefs.find(prefs, address)
                     ?.preferredImagePath(PodImageResource.BOX)
@@ -572,6 +612,13 @@ object MiBluetoothToastHook : HookContext() {
                     fallbackDrawableName = fallbackDrawableName,
                 )
             ) {
+                liveConnectionCards[address] = ColorOsLiveConnectionCard(
+                    shownAtElapsed = android.os.SystemClock.elapsedRealtime(),
+                    deviceName = deviceName,
+                    imageFileName = imageFileName,
+                    fallbackDrawableName = fallbackDrawableName,
+                    batteryText = batteryText,
+                )
                 Log.i("HuaweiPods", "ColorOS official accessory popup requested route=$deviceRoute")
             } else {
                 createPodsHeadsUpNotification(address, context, batteryParams)
@@ -671,6 +718,10 @@ object MiBluetoothToastHook : HookContext() {
                                             officialPopupShownAddresses.remove(address)
                                             Log.i("HuaweiPods", "ColorOS case opened; requesting official popup")
                                         }
+                                        if (address in officialPopupShownAddresses) {
+                                            runCatching { refreshColorOsConnectionCard(address, context, batteryParams) }
+                                                .onFailure { Log.w("HuaweiPods", "Connection card refresh failed", it) }
+                                        }
                                         // ColorOS does not consistently emit the separate strong-toast request.
                                         // The first verified battery update is the reliable connected-device event.
                                         showColorOsConnectionPopup(address, context, batteryParams, caseOpened)
@@ -740,6 +791,7 @@ object MiBluetoothToastHook : HookContext() {
                                             ) == BluetoothAdapter.STATE_OFF
                                         ) {
                                             officialPopupShownAddresses.clear()
+                                            liveConnectionCards.clear()
                                             cancelAllPodsNotifications(context)
                                         }
                                     }
@@ -883,6 +935,7 @@ object MiBluetoothToastHook : HookContext() {
             activeNotificationAddresses.clear()
             disconnectedNotificationAddresses.clear()
             officialPopupShownAddresses.clear()
+            liveConnectionCards.clear()
             lastCaseReported.clear()
             lastCaseOpenPopupAt.clear()
             lowBatteryTracker.clear()
