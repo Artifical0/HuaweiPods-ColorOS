@@ -88,6 +88,7 @@ object HuaweiPodsBroadcastTrustPolicy {
             HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_REFRESH,
             HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND,
             HuaweiPodsAction.ACTION_COLOROS_POPUP_HOST_PROBE,
+            HuaweiPodsAction.ACTION_PREVIEW_LOW_BATTERY_REMINDER,
             HuaweiPodsAction.ACTION_GET_PODS_MAC ->
                 BroadcastActionDomain.APP_CONTROL
 

@@ -98,6 +98,8 @@ object MiBluetoothToastHook : HookContext() {
     private val lastCaseOpenPopupAt = ConcurrentHashMap<String, Long>()
     private val lowBatteryTracker = ColorOsLowBatteryTracker()
     @Volatile
+    private var latestBatteryUpdate: Pair<BluetoothDevice, BatteryParams>? = null
+    @Volatile
     private var receiverRegistered = false
     @Volatile
     private var colorOsPopupHostReady = false
@@ -392,32 +394,29 @@ object MiBluetoothToastHook : HookContext() {
             Log.i("HuaweiPods", "ColorOS connection heads-up posted")
         }
 
-        /**
-         * ColorOS 的三方耳机低电量胶囊只对云端白名单厂商开放，这里用一条高优先级通知代替：
-         * 在线且未充电的耳机降到 20% 以下时提醒一次，充电或电量回升后重新布防。
-         */
         @SuppressLint("MissingPermission")
-        fun maybeShowLowBatteryReminder(
-            device: BluetoothDevice,
+        fun postLowBatteryReminder(
             context: Context,
-            batteryParams: BatteryParams,
+            device: BluetoothDevice?,
+            lowEarbuds: List<Pair<Boolean, Int>>,
+            preview: Boolean,
         ) {
-            val address = device.address
-            if (!ConfigManager.lowBatteryReminderEnabled()) {
-                lowBatteryTracker.reset(address)
-                return
-            }
-            if (!lowBatteryTracker.shouldNotify(address, batteryParams)) return
             if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return
             val moduleResources = ModuleResourceResolver.resources(context) ?: return
+            val address = device?.address.orEmpty()
             val deviceName = runCatching {
-                device.alias?.takeIf(String::isNotBlank) ?: device.name?.takeIf(String::isNotBlank)
+                device?.alias?.takeIf(String::isNotBlank) ?: device?.name?.takeIf(String::isNotBlank)
             }.getOrNull() ?: "HuaweiPods"
-            val text = lowBatteryTracker.lowEarbuds(batteryParams).joinToString("  ") { (isLeft, level) ->
+            val levels = lowEarbuds.joinToString("  ") { (isLeft, level) ->
                 val label = moduleResources.getString(
                     if (isLeft) R.string.batt_left_pod else R.string.batt_right_pod,
                 )
                 "$label $level%"
+            }
+            val text = if (preview) {
+                moduleResources.getString(R.string.low_battery_reminder_preview_text, levels)
+            } else {
+                moduleResources.getString(R.string.low_battery_reminder_text, levels)
             }
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val channelId = "HuaweiPodsLowBattery"
@@ -430,13 +429,15 @@ object MiBluetoothToastHook : HookContext() {
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 },
             )
-            val largeIcon = PodImageLoader.loadBoxBitmap(context, prefs, address)
+            val largeIcon = address.takeIf(String::isNotBlank)
+                ?.let { PodImageLoader.loadBoxBitmap(context, prefs, it) }
                 ?: BitmapFactory.decodeResource(moduleResources, R.drawable.img_box)
             val notification = Notification.Builder(context, channelId)
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
                 .setContentTitle(moduleResources.getString(R.string.low_battery_reminder_title, deviceName))
                 .setContentText(text)
-                .setContentIntent(popupPendingIntent(context, device, deviceName))
+                .setStyle(Notification.BigTextStyle().bigText(text))
+                .apply { device?.let { setContentIntent(popupPendingIntent(context, it, deviceName)) } }
                 .setAutoCancel(true)
                 .setTimeoutAfter(60_000L)
                 .setCategory(Notification.CATEGORY_STATUS)
@@ -444,7 +445,36 @@ object MiBluetoothToastHook : HookContext() {
                 .apply { largeIcon?.let(::setLargeIcon) }
                 .build()
             manager.notify("HuaweiPodsLowBattery$address", 10005, notification)
-            Log.i("HuaweiPods", "Low battery reminder posted device=$address text=$text")
+            Log.i("HuaweiPods", "Low battery reminder posted device=$address preview=$preview levels=$levels")
+        }
+
+        /**
+         * ColorOS 的三方耳机低电量胶囊只对云端白名单厂商开放，这里用一条高优先级通知代替：
+         * 在线且未充电的耳机降到 20%、10% 时各提醒一次，充电或电量回升后重新布防。
+         */
+        fun maybeShowLowBatteryReminder(
+            device: BluetoothDevice,
+            context: Context,
+            batteryParams: BatteryParams,
+        ) {
+            val address = device.address
+            latestBatteryUpdate = device to batteryParams
+            if (!ConfigManager.lowBatteryReminderEnabled()) {
+                lowBatteryTracker.reset(address)
+                return
+            }
+            if (!lowBatteryTracker.shouldNotify(address, batteryParams)) return
+            postLowBatteryReminder(context, device, lowBatteryTracker.lowEarbuds(batteryParams), preview = false)
+        }
+
+        /** 设置页“发送测试提醒”：用当前耳机电量（未连接时用示例电量）立即发一条，不影响提醒档位。 */
+        fun previewLowBatteryReminder(context: Context) {
+            val (device, battery) = latestBatteryUpdate ?: (null to null)
+            val levels = listOfNotNull(
+                battery?.left?.takeIf { it.isConnected }?.let { true to it.battery },
+                battery?.right?.takeIf { it.isConnected }?.let { false to it.battery },
+            ).ifEmpty { listOf(true to 15, false to 18) }
+            postLowBatteryReminder(context, device, levels, preview = true)
         }
 
         fun showColorOsConnectionPopup(
@@ -601,6 +631,9 @@ object MiBluetoothToastHook : HookContext() {
                                         intent.getStringExtra("address"),
                                     )
                                 }
+                                HuaweiPodsAction.ACTION_PREVIEW_LOW_BATTERY_REMINDER -> {
+                                    previewLowBatteryReminder(context)
+                                }
                                 HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION -> {
                                     val batteryParams = intent.getParcelableExtra(
                                         "batteryParams",
@@ -649,6 +682,9 @@ object MiBluetoothToastHook : HookContext() {
                                             disconnectedNotificationAddresses.add(it.address)
                                             cancelNotification(it, context)
                                             lowBatteryTracker.reset(it.address)
+                                            if (latestBatteryUpdate?.first?.address == it.address) {
+                                                latestBatteryUpdate = null
+                                            }
                                             runCatching {
                                                 (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                                                     .cancel("HuaweiPodsLowBattery${it.address}", 10005)
@@ -720,6 +756,7 @@ object MiBluetoothToastHook : HookContext() {
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONFIG_CHANGED)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_POD_IMAGES_CHANGED)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION)
+                    addHuaweiPodsAction(HuaweiPodsAction.ACTION_PREVIEW_LOW_BATTERY_REMINDER)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_CANCEL_PODS_NOTIFICATION)
                     addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
                     addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
@@ -849,6 +886,7 @@ object MiBluetoothToastHook : HookContext() {
             lastCaseReported.clear()
             lastCaseOpenPopupAt.clear()
             lowBatteryTracker.clear()
+            latestBatteryUpdate = null
         }
     }
 

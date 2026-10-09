@@ -8,7 +8,7 @@ import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.PodParams
 
 internal const val COLOR_OS_WEAR_NOT_WEARING = 1
-internal const val COLOR_OS_LOW_BATTERY_THRESHOLD = 20
+internal val COLOR_OS_LOW_BATTERY_TIERS = listOf(20, 10)
 
 /**
  * 佩戴状态：充电中的耳机在盒内；其余在线耳机按耳机上报的整体入耳状态区分佩戴 / 未佩戴，
@@ -31,33 +31,44 @@ internal fun colorOsNoiseControlOptions(route: HuaweiDeviceRoute): List<NoiseCon
     }
 }
 
-/** 在线且未充电的耳机电量不高于阈值时提醒一次；全部回到阈值以上或开始充电后重新布防。 */
-internal class ColorOsLowBatteryTracker(private val threshold: Int = COLOR_OS_LOW_BATTERY_THRESHOLD) {
-    private val notified = mutableSetOf<String>()
+/**
+ * 低电量提醒分 20% / 10% 两档：在线且未充电的耳机首次降到某一档时各提醒一次；全部回到 20% 以上
+ * 或开始充电后重新布防。电量在档位边界小幅回弹不会重复提醒。
+ */
+internal class ColorOsLowBatteryTracker(
+    private val tiers: List<Int> = COLOR_OS_LOW_BATTERY_TIERS,
+) {
+    private val notifiedTiers = mutableMapOf<String, Int>()
 
     @Synchronized
     fun shouldNotify(address: String, battery: BatteryParams): Boolean {
-        if (lowEarbuds(battery).isEmpty()) {
-            notified.remove(address)
+        val lowest = lowEarbuds(battery).minOfOrNull { it.second }
+        if (lowest == null) {
+            notifiedTiers.remove(address)
             return false
         }
-        return notified.add(address)
+        val tier = tiers.count { lowest <= it }
+        if (tier <= (notifiedTiers[address] ?: 0)) return false
+        notifiedTiers[address] = tier
+        return true
     }
 
-    fun lowEarbuds(battery: BatteryParams): List<Pair<Boolean, Int>> =
-        listOfNotNull(
+    fun lowEarbuds(battery: BatteryParams): List<Pair<Boolean, Int>> {
+        val threshold = tiers.maxOrNull() ?: return emptyList()
+        return listOfNotNull(
             battery.left?.let { true to it },
             battery.right?.let { false to it },
         ).filter { (_, pod) -> pod.isConnected && !pod.isCharging && pod.battery in 1..threshold }
             .map { (isLeft, pod) -> isLeft to pod.battery }
+    }
 
     @Synchronized
     fun reset(address: String) {
-        notified.remove(address)
+        notifiedTiers.remove(address)
     }
 
     @Synchronized
     fun clear() {
-        notified.clear()
+        notifiedTiers.clear()
     }
 }

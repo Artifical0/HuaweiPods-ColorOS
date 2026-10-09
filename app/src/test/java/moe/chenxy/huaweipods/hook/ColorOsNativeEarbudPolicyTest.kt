@@ -41,16 +41,28 @@ class ColorOsNativeEarbudPolicyTest {
     }
 
     @Test
-    fun `low battery reminder fires once until recovered`() {
+    fun `low battery reminder fires once per tier until recovered`() {
         val tracker = ColorOsLowBatteryTracker()
-        val low = BatteryParams(left = PodParams(battery = 18, isConnected = true), right = worn)
-        val recovered = BatteryParams(left = PodParams(battery = 60, isConnected = true), right = worn)
+        fun left(level: Int) = BatteryParams(left = PodParams(battery = level, isConnected = true), right = worn)
 
-        assertTrue(tracker.shouldNotify("A", low))
-        assertFalse(tracker.shouldNotify("A", low))
-        assertFalse(tracker.shouldNotify("A", recovered))
-        assertTrue(tracker.shouldNotify("A", low))
-        assertEquals(listOf(true to 18), tracker.lowEarbuds(low))
+        assertTrue(tracker.shouldNotify("A", left(18)))
+        assertFalse(tracker.shouldNotify("A", left(15)))
+        assertFalse(tracker.shouldNotify("A", left(21).copy(right = PodParams(battery = 19, isConnected = true))))
+        assertTrue(tracker.shouldNotify("A", left(9)))
+        assertFalse(tracker.shouldNotify("A", left(11)))
+        assertFalse(tracker.shouldNotify("A", left(8)))
+        assertFalse(tracker.shouldNotify("A", left(60)))
+        assertTrue(tracker.shouldNotify("A", left(18)))
+        assertEquals(listOf(true to 18), tracker.lowEarbuds(left(18)))
+    }
+
+    @Test
+    fun `dropping straight below ten percent notifies once`() {
+        val tracker = ColorOsLowBatteryTracker()
+        val battery = BatteryParams(left = PodParams(battery = 7, isConnected = true))
+
+        assertTrue(tracker.shouldNotify("A", battery))
+        assertFalse(tracker.shouldNotify("A", battery))
     }
 
     @Test

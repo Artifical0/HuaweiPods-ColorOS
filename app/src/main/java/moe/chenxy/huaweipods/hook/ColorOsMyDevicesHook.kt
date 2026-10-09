@@ -28,6 +28,8 @@ import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.displayName
+import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
+import moe.chenxy.huaweipods.pods.supportsLowLatencyControl
 import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.pods.resolveHuaweiDeviceRoute
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
@@ -62,6 +64,7 @@ object ColorOsMyDevicesHook : HookContext() {
     private val preferenceRows = WeakHashMap<Any, ColorOsHeadsetRow>()
     private val latestSummaries = ConcurrentHashMap<String, String>()
     private val latestAncModes = ConcurrentHashMap<String, NoiseControlMode>()
+    private val latestLowLatency = ConcurrentHashMap<String, Boolean>()
     private val hookedBindMethods = ConcurrentHashMap.newKeySet<Method>()
 
     override fun onHook() {
@@ -91,6 +94,7 @@ object ColorOsMyDevicesHook : HookContext() {
         synchronized(preferenceRows) { preferenceRows.clear() }
         latestSummaries.clear()
         latestAncModes.clear()
+        latestLowLatency.clear()
     }
 
     private fun hookLegacyDetailPage() {
@@ -214,7 +218,7 @@ object ColorOsMyDevicesHook : HookContext() {
             // RecyclerView 复用了原来承载 HuaweiPods 入口的 View；系统绑定已恢复其文字和点击，
             // 只需移除注入的降噪切换。
             synchronized(activeRows) { activeRows.remove(itemView) }
-            removeAncControls(itemView)
+            removeQuickControls(itemView)
             return
         }
         synchronized(activeRows) { activeRows[itemView] = entry }
@@ -254,8 +258,8 @@ object ColorOsMyDevicesHook : HookContext() {
 
     private fun customizeRow(row: View, entry: ColorOsHeadsetRow, summary: String? = null) {
         customizeRowText(row, entry.deviceName, summary)
-        runCatching { attachAncControls(row, entry) }
-            .onFailure { Log.w(TAG, "Unable to attach noise control", it) }
+        runCatching { attachQuickControls(row, entry) }
+            .onFailure { Log.w(TAG, "Unable to attach quick controls", it) }
     }
 
     private fun customizeRowText(row: View, deviceName: String, summary: String? = null) {
@@ -302,9 +306,17 @@ object ColorOsMyDevicesHook : HookContext() {
                     val mode = NoiseControlMode.fromBroadcastStatus(received.getIntExtra("status", 0))
                     if (!mode.isKnownMode()) return
                     latestAncModes[address] = mode
-                    synchronized(activeRows) { activeRows.entries.toList() }
-                        .filter { (row, entry) -> row.isAttachedToWindow && entry.address == address }
-                        .forEach { (row, entry) -> updateAncControls(row, entry) }
+                    refreshQuickControls(address)
+                    return
+                }
+                if (action == HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED) {
+                    val address = received.getStringExtra("address")?.uppercase() ?: return
+                    if (!received.hasExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED)) return
+                    latestLowLatency[address] = received.getBooleanExtra(
+                        HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED,
+                        false,
+                    )
+                    refreshQuickControls(address)
                     return
                 }
                 if (action != HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED) return
@@ -330,6 +342,7 @@ object ColorOsMyDevicesHook : HookContext() {
                 IntentFilter().apply {
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_ANC_CHANGED)
+                    addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED)
                 },
                 Context.RECEIVER_EXPORTED,
             )
@@ -354,96 +367,177 @@ object ColorOsMyDevicesHook : HookContext() {
     }
 
     /**
-     * 在入口摘要下方加入降噪模式切换（关闭 / 降噪 / 通透）。ColorOS 的三方耳机详情页没有降噪控件，
-     * 这里在已接管的入口行内提供，与 AirPods 页面的三段式切换对应。摘要所在容器不是纵向
+     * 在入口摘要下方加入按机型能力显示的快捷控制：降噪耳机为关闭 / 降噪 / 通透三段切换（ColorOS
+     * 只给 AirPods 提供降噪控件），支持低时延的型号另有低时延开关。摘要所在容器不是纵向
      * LinearLayout 时不注入，保持系统原样。
      */
-    private fun attachAncControls(row: View, entry: ColorOsHeadsetRow) {
-        val options = colorOsNoiseControlOptions(entry.route)
-        if (options.isEmpty()) return
+    private fun attachQuickControls(row: View, entry: ColorOsHeadsetRow) {
+        val ancOptions = colorOsNoiseControlOptions(entry.route)
+        val lowLatency = entry.route.supportsLowLatencyControl
+        if (ancOptions.isEmpty() && !lowLatency) return
         val summary = row.findViewById<TextView>(android.R.id.summary)
             ?: collectTextViews(row).getOrNull(1)
             ?: return
         val container = summary.parent as? LinearLayout ?: return
         if (container.orientation != LinearLayout.VERTICAL) return
-        val existing = container.findViewWithTag<LinearLayout>(ANC_CONTROLS_TAG)
-        val controls = existing ?: LinearLayout(row.context).apply {
-            tag = ANC_CONTROLS_TAG
+        val expectedChips = ancOptions.size + if (lowLatency) 1 else 0
+        val existing = container.findViewWithTag<LinearLayout>(QUICK_CONTROLS_TAG)
+        if (existing == null || existing.chipCount() != expectedChips) {
+            existing?.let(container::removeView)
+            val controls = LinearLayout(row.context).apply {
+                tag = QUICK_CONTROLS_TAG
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = row.dp(8) }
+            }
+            if (ancOptions.isNotEmpty()) {
+                controls.addView(chipRow(row, ancOptions.map { mode ->
+                    quickChip(row.context, mode, ancLabel(mode)) { view ->
+                        val device = bluetoothDevice(entry.address) ?: return@quickChip
+                        latestAncModes[entry.address] = mode
+                        refreshQuickControls(entry.address)
+                        requestAncMode(view.context, device, entry.route, mode)
+                    }
+                }))
+            }
+            if (lowLatency) {
+                controls.addView(chipRow(row, listOf(
+                    quickChip(row.context, LOW_LATENCY_CHIP_TAG, lowLatencyLabel()) { view ->
+                        val device = bluetoothDevice(entry.address) ?: return@quickChip
+                        val enabled = latestLowLatency[entry.address] != true
+                        latestLowLatency[entry.address] = enabled
+                        refreshQuickControls(entry.address)
+                        requestLowLatency(view.context, device, entry.route, enabled)
+                    },
+                )).apply {
+                    if (ancOptions.isNotEmpty()) {
+                        (layoutParams as LinearLayout.LayoutParams).topMargin = row.dp(8)
+                    }
+                })
+            }
+            container.addView(controls)
+        }
+        updateQuickControls(row, entry)
+    }
+
+    private fun chipRow(row: View, chips: List<TextView>): LinearLayout =
+        LinearLayout(row.context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = row.dp(8) }
-            container.addView(this)
-        }
-        if (controls.childCount != options.size) {
-            controls.removeAllViews()
-            options.forEachIndexed { index, mode ->
-                controls.addView(ancChip(row.context, mode, entry), LinearLayout.LayoutParams(
-                    0,
-                    row.dp(32),
-                    1f,
-                ).apply { if (index > 0) marginStart = row.dp(8) })
+            )
+            chips.forEachIndexed { index, chip ->
+                addView(chip, LinearLayout.LayoutParams(0, row.dp(32), 1f).apply {
+                    if (index > 0) marginStart = row.dp(8)
+                })
             }
         }
-        updateAncControls(row, entry)
+
+    private fun quickChip(
+        context: Context,
+        key: Any,
+        label: String,
+        onClick: (View) -> Unit,
+    ): TextView = TextView(context).apply {
+        tag = key
+        gravity = Gravity.CENTER
+        maxLines = 1
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+        text = label
+        isClickable = true
+        setOnClickListener(onClick)
     }
 
-    private fun ancChip(context: Context, mode: NoiseControlMode, entry: ColorOsHeadsetRow): TextView =
-        TextView(context).apply {
-            tag = mode
-            gravity = Gravity.CENTER
-            maxLines = 1
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            text = ancLabel(mode)
-            isClickable = true
-            setOnClickListener { view ->
-                val device = bluetoothDevice(entry.address) ?: return@setOnClickListener
-                latestAncModes[entry.address] = mode
-                (view.parent?.parent as? View)?.let { updateAncControls(it, entry) }
-                requestAncMode(view.context, device, mode)
-            }
-        }
+    private fun LinearLayout.chipCount(): Int =
+        (0 until childCount).sumOf { (getChildAt(it) as? ViewGroup)?.childCount ?: 0 }
 
-    private fun updateAncControls(row: View, entry: ColorOsHeadsetRow) {
-        val controls = row.findViewWithTag<LinearLayout>(ANC_CONTROLS_TAG) ?: return
-        val selected = latestAncModes[entry.address]
+    private fun refreshQuickControls(address: String) {
+        synchronized(activeRows) { activeRows.entries.toList() }
+            .filter { (row, entry) -> row.isAttachedToWindow && entry.address == address }
+            .forEach { (row, entry) -> updateQuickControls(row, entry) }
+    }
+
+    private fun updateQuickControls(row: View, entry: ColorOsHeadsetRow) {
+        val controls = row.findViewWithTag<LinearLayout>(QUICK_CONTROLS_TAG) ?: return
+        val selectedAnc = latestAncModes[entry.address]
+        val lowLatencyEnabled = latestLowLatency[entry.address] == true
         val accent = row.context.themeColor(android.R.attr.colorAccent, Color.rgb(0x2A, 0x6D, 0xF4))
         val normalText = row.context.themeColor(android.R.attr.textColorPrimary, Color.DKGRAY)
-        repeat(controls.childCount) { index ->
-            val chip = controls.getChildAt(index) as? TextView ?: return@repeat
-            val active = chip.tag == selected
-            chip.background = GradientDrawable().apply {
-                cornerRadius = row.dp(16).toFloat()
-                if (active) {
-                    setColor(accent)
-                } else {
-                    setColor(Color.TRANSPARENT)
-                    setStroke(row.dp(1), ColorStateList.valueOf(normalText).withAlpha(0x40))
+        repeat(controls.childCount) { rowIndex ->
+            val chipRow = controls.getChildAt(rowIndex) as? ViewGroup ?: return@repeat
+            repeat(chipRow.childCount) { index ->
+                val chip = chipRow.getChildAt(index) as? TextView ?: return@repeat
+                val active = when (chip.tag) {
+                    LOW_LATENCY_CHIP_TAG -> lowLatencyEnabled
+                    else -> chip.tag == selectedAnc
                 }
+                chip.background = GradientDrawable().apply {
+                    cornerRadius = row.dp(16).toFloat()
+                    if (active) {
+                        setColor(accent)
+                    } else {
+                        setColor(Color.TRANSPARENT)
+                        setStroke(row.dp(1), ColorStateList.valueOf(normalText).withAlpha(0x40))
+                    }
+                }
+                chip.setTextColor(if (active) Color.WHITE else normalText)
+                chip.typeface = if (active) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                chip.isSelected = active
+                if (chip.tag == LOW_LATENCY_CHIP_TAG) chip.text = lowLatencyLabel(active)
             }
-            chip.setTextColor(if (active) Color.WHITE else normalText)
-            chip.typeface = if (active) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-            chip.isSelected = active
         }
     }
 
-    private fun removeAncControls(itemView: View) {
-        val controls = itemView.findViewWithTag<View>(ANC_CONTROLS_TAG) ?: return
+    private fun removeQuickControls(itemView: View) {
+        val controls = itemView.findViewWithTag<View>(QUICK_CONTROLS_TAG) ?: return
         (controls.parent as? ViewGroup)?.removeView(controls)
     }
 
-    private fun requestAncMode(context: Context, device: BluetoothDevice, mode: NoiseControlMode) {
+    /** 蓝牙进程要求控制指令带地址和机型路由，并按 sentFromPackage 校验发送方。 */
+    private fun sendControl(context: Context, action: String, device: BluetoothDevice, route: HuaweiDeviceRoute, fill: Intent.() -> Unit) {
+        context.sendIdentitySharingBroadcast(Intent(action).apply {
+            setPackage(BLUETOOTH_PACKAGE)
+            putExtra("address", device.address)
+            encodeHuaweiDeviceRouteForBroadcast(route)?.let {
+                putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)
+            }
+            fill()
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        })
+    }
+
+    private fun requestAncMode(
+        context: Context,
+        device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
+        mode: NoiseControlMode,
+    ) {
         runCatching {
-            context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_ANC_SELECT).apply {
-                setPackage(BLUETOOTH_PACKAGE)
-                putExtra("address", device.address)
+            sendControl(context, HuaweiPodsAction.ACTION_ANC_SELECT, device, route) {
                 putExtra("status", mode.broadcastStatus)
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            })
+            }
             Log.i(TAG, "Noise control requested mode=$mode")
         }.onFailure {
             Log.w(TAG, "Unable to request noise control mode=$mode", it)
+        }
+    }
+
+    private fun requestLowLatency(
+        context: Context,
+        device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
+        enabled: Boolean,
+    ) {
+        runCatching {
+            sendControl(context, HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET, device, route) {
+                putExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED, enabled)
+            }
+            Log.i(TAG, "Low latency requested enabled=$enabled")
+        }.onFailure {
+            Log.w(TAG, "Unable to request low latency enabled=$enabled", it)
         }
     }
 
@@ -454,6 +548,16 @@ object ColorOsMyDevicesHook : HookContext() {
             NoiseControlMode.NOISE_CANCELLATION -> if (chinese) "降噪" else "Noise cancelling"
             NoiseControlMode.TRANSPARENCY -> if (chinese) "通透" else "Awareness"
             NoiseControlMode.UNKNOWN -> ""
+        }
+    }
+
+    private fun lowLatencyLabel(enabled: Boolean = false): String {
+        val chinese = Locale.getDefault().language == Locale.CHINESE.language
+        return when {
+            chinese && enabled -> "低时延 · 已开启"
+            chinese -> "低时延 · 已关闭"
+            enabled -> "Low latency · On"
+            else -> "Low latency · Off"
         }
     }
 
@@ -542,7 +646,8 @@ private data class ColorOsHeadsetRow(
     val route: HuaweiDeviceRoute,
 )
 
-private const val ANC_CONTROLS_TAG = "huaweipods_noise_control"
+private const val QUICK_CONTROLS_TAG = "huaweipods_quick_controls"
+private const val LOW_LATENCY_CHIP_TAG = "huaweipods_low_latency"
 
 internal fun colorOsBatterySummary(
     leftBattery: Int,

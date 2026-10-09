@@ -47,6 +47,7 @@ object HuaweiPodsAction {
     const val ACTION_SHOW_PODS_UI = PREFIX + ".show_pods_ui"
     const val ACTION_UPDATE_PODS_NOTIFICATION = PREFIX + ".updatepodsnotification"
     const val ACTION_CANCEL_PODS_NOTIFICATION = PREFIX + ".cancelpodsnotification"
+    const val ACTION_PREVIEW_LOW_BATTERY_REMINDER = PREFIX + ".preview_low_battery_reminder"
 
     const val ACTION_PODS_UI_INIT = PREFIX + ".ui_init"
     const val ACTION_PODS_UI_CLOSED = PREFIX + ".ui_closed"

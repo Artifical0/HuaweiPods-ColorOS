@@ -118,8 +118,13 @@
     <string name="lockscreen_notification">锁屏通知</string>
     <string name="lockscreen_notification_summary">允许已启用的耳机常驻通知显示在锁屏和息屏界面</string>
     <string name="low_battery_reminder">耳机低电量提醒</string>
-    <string name="low_battery_reminder_summary">已连接的耳机未充电且电量降到 20% 及以下时提醒一次</string>
+    <string name="low_battery_reminder_summary">已连接的耳机未充电时，电量降到 20% 和 10% 各提醒一次</string>
     <string name="low_battery_reminder_title">%1$s 电量低</string>
+    <string name="low_battery_reminder_preview_sent">已发送测试提醒；如果没有看到通知，请在系统设置中允许“蓝牙”发送通知</string>
+    <string name="low_battery_reminder_preview_summary">立即发出一条低电量提醒，确认通知样式</string>
+    <string name="low_battery_reminder_preview">发送测试提醒</string>
+    <string name="low_battery_reminder_preview_text">测试提醒 · 当前电量：%1$s</string>
+    <string name="low_battery_reminder_text">剩余电量：%1$s，请及时充电</string>
     <string name="persistent_notification">耳机常驻通知</string>
     <string name="persistent_notification_summary">在通知栏显示耳机连接状态和电量</string>
     <string name="freeclip_adaptive_channels">左右耳机自适应</string>

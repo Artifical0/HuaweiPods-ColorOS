@@ -1178,6 +1178,17 @@ internal fun MainUI(
                             ConfigManager.updateLowBatteryReminderEnabled(prefs, xposedService, it)
                             broadcastConfigChanged(context, "com.android.bluetooth")
                         },
+                        onPreviewLowBatteryReminder = {
+                            sendBluetoothModuleBroadcast(
+                                context,
+                                HuaweiPodsAction.ACTION_PREVIEW_LOW_BATTERY_REMINDER,
+                            )
+                            Toast.makeText(
+                                context,
+                                R.string.low_battery_reminder_preview_sent,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        },
                         appLanguage = appLanguage,
                         onAppLanguageChange = {
                             appLanguage.value = it

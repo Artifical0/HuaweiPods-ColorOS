@@ -28,9 +28,9 @@ The unified build supports the 17 models below in one APK. Model-specific test A
 
 - Syncs upstream HuaweiPods 1.9.0: adds HUAWEI FreeBuds 7.
 - **More responsive My Devices battery**: while earbuds are connected, battery is refreshed in the background every 15 seconds and immediately when the screen turns on.
-- **Noise control in My Devices**: the HuaweiPods entry gains an Off / Noise cancelling / Awareness switch, shown per model capability and synced with the earbuds.
+- **Quick controls in My Devices**: the HuaweiPods entry gains an Off / Noise cancelling / Awareness switch or a low-latency toggle, depending on the model, synced with the earbuds.
 - **System Bluetooth settings**: the device list shows left/right battery and the detail page gets an earphone-settings entry that opens HuaweiPods (requires the optional `com.oplus.wirelesssettings` scope).
-- **Low battery reminder** once an earbud that is not charging drops to 20% or below; can be turned off in settings.
+- **Low battery reminder** when an earbud that is not charging drops to 20% and again at 10%; can be turned off or previewed in settings.
 - **Wear state**: the earbuds' in-ear report is forwarded to the system.
 - **ColorOS only**: removes the Xiaomi / HyperOS hooks, scopes, settings, and dependencies (Super Island, focus notifications, Fusion Device Center, Xiaomi Bluetooth, the Settings detail page). LSPosed scopes are now Bluetooth, My Devices, Quick Device Connect, and optionally Huawei AI Life audio.
 - The About page now shows this fork's maintainer and lists the upstream project separately.
@@ -86,7 +86,7 @@ The table lists currently integrated capabilities. Unlisted official features sh
 - **ANC dial** for FreeBuds 3 spatial noise cancellation adjustment only.
 - **ColorOS Quick Device Connect popup** on connection and when the case is opened, plus **Fluid Cloud** with left, right, and case battery levels on Android 16+.
 - **System earphone battery channel**: the status bar, Bluetooth settings, and My Devices show left, right, and case battery levels.
-- **My Devices** headset detail page shows HuaweiPods battery, a settings entry, and a noise-control switch.
+- **My Devices** headset detail page shows HuaweiPods battery, a settings entry, and noise-control or low-latency quick controls.
 - **System Bluetooth settings** show left/right battery and an earphone-settings entry; low-battery reminders.
 - Independent switches for the persistent headset notification and lock-screen notifications.
 - Notification taps can open the module popup, system settings, or Huawei Smart Audio; verified models can toggle low latency in the popup.
