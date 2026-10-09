@@ -18,13 +18,15 @@
 
 HuaweiPods ColorOS is an Android 15+ Xposed module with the independent application ID `io.github.artifical0.huaweipods.coloros`, so the original HuaweiPods LSPosed marketplace entry cannot replace it. ColorOS integration includes the official Quick Device Connect popup, the My Devices headset-detail entry, the system earphone battery channel, and an Android 16+ Live Alert / Fluid Cloud battery card.
 
-> Starting with 1.9.0-coloros.1 this fork targets ColorOS only. The upstream Xiaomi / HyperOS integrations (system Bluetooth detail page, Super Island, Fusion Device Center, and so on) have been removed; HyperOS users should use upstream [HuaweiPods](https://github.com/Nshpiter/HuaweiPods).
+> Starting with 1.9.0.1 this fork targets ColorOS only. The upstream Xiaomi / HyperOS integrations (system Bluetooth detail page, Super Island, Fusion Device Center, and so on) have been removed; HyperOS users should use upstream [HuaweiPods](https://github.com/Nshpiter/HuaweiPods).
 
 > The My Devices entry supports both the ColorOS 16.1 (`com.heytap.mydevices` 17.4.15) and ColorOS 17 (17.25.10) detail pages. The ColorOS 17 work was checked statically against OnePlus PLK110 `PLK110_17.0.0.102(CN01)` firmware and still needs on-device verification. Private hosts change between system updates; unknown builds fall back to the stock pages while keeping the module UI, Live Alerts, and the standard Bluetooth detail page.
 
 The unified build supports the 17 models below in one APK. Model-specific test APKs are no longer distributed.
 
-## 1.9.0-coloros.1
+## 1.9.0.1
+
+> Versions now follow `<upstream version>.<fork revision>`; the ColorOS label lives in the app name, and APKs are named `HuaweiPods-ColorOS-<version>-release.apk`.
 
 - Syncs upstream HuaweiPods 1.9.0: adds HUAWEI FreeBuds 7.
 - **More responsive My Devices battery**: while earbuds are connected, battery is refreshed in the background every 15 seconds and immediately when the screen turns on.

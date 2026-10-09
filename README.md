@@ -22,7 +22,7 @@
 
 HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipods.coloros` 的 Android 15+ Xposed 模块，不会被原版 HuaweiPods 的 LSPosed 商店条目覆盖更新。ColorOS 已接入官方“快速设备连接”弹窗、“我的设备”耳机详情入口、系统耳机电量通道及 Android 16+ 流体云电量卡片。
 
-> 从 1.9.0-coloros.1 起本分支只适配 ColorOS，已移除上游的小米 / HyperOS 集成（系统蓝牙详情页、超级岛、融合设备中心等）。HyperOS 用户请使用上游 [HuaweiPods](https://github.com/Nshpiter/HuaweiPods)。
+> 从 1.9.0.1 起本分支只适配 ColorOS，已移除上游的小米 / HyperOS 集成（系统蓝牙详情页、超级岛、融合设备中心等）。HyperOS 用户请使用上游 [HuaweiPods](https://github.com/Nshpiter/HuaweiPods)。
 
 > ColorOS 说明：“我的设备”入口已适配 ColorOS 16.1（`com.heytap.mydevices` 17.4.15）与 ColorOS 17（17.25.10）两代详情页。ColorOS 17 部分目前依据 OnePlus PLK110 `PLK110_17.0.0.102(CN01)` 固件静态核对，尚待实机验证。私有宿主会随系统更新变化，未知版本会退回系统原样，仍保留模块内电量、流体云和通用蓝牙详情页。
 
@@ -30,7 +30,9 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 
 > 当前统一版已集成下列 17 个型号，所有型号使用同一个 APK，不再按型号单独分发测试包。
 
-## 1.9.0-coloros.1
+## 1.9.0.1
+
+> 版本号改为“上游版本.修订号”，ColorOS 标识已在软件名中；安装包为 `HuaweiPods-ColorOS-<版本>-release.apk`。
 
 - 同步上游 HuaweiPods 1.9.0：新增 HUAWEI FreeBuds 7。
 - **“我的设备”电量更灵敏**：耳机连接期间每 15 秒在后台刷新一次电量，亮屏时立即刷新，系统界面不再长时间停留在旧电量。
