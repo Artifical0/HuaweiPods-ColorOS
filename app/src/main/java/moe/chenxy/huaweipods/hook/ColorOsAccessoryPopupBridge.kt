@@ -48,6 +48,60 @@ internal object ColorOsAccessoryPopupBridge {
         imageFileName: String?,
         fallbackDrawableName: String? = null,
     ): Boolean = runCatching {
+        val dialogIntent = dialogIntentFactory(
+            context,
+            deviceName,
+            batteryText,
+            imageFileName,
+            fallbackDrawableName,
+        )
+        checkNotNull(context.startService(dialogIntent(DIALOG_TYPE_NEW_CONNECTION))) {
+            "ColorOS SceneService did not accept the popup request"
+        }
+        // The vendor API models a popup as 0 (open) followed by 2 (connected). Sending only
+        // state 0 makes ColorOS close the card when it observes that audio is already routed.
+        Handler(Looper.getMainLooper()).postDelayed({
+            runCatching {
+                context.startService(dialogIntent(DIALOG_TYPE_CONNECTED_UPDATE))
+            }.onFailure {
+                Log.w("HuaweiPods", "ColorOS connected-card update failed", it)
+            }
+        }, 120L)
+        true
+    }.onFailure {
+        Log.w("HuaweiPods", "ColorOS official accessory popup unavailable", it)
+    }.getOrDefault(false)
+
+    /**
+     * 卡片仍在显示时刷新电量文字。只发送状态 2：快速设备连接把它交给当前卡片重绘；
+     * 卡片已关闭时系统会按“已显示过”过滤掉，不会重新弹出。
+     */
+    fun updateConnected(
+        context: Context,
+        deviceName: String,
+        batteryText: String,
+        imageFileName: String?,
+        fallbackDrawableName: String? = null,
+    ): Boolean = runCatching {
+        val dialogIntent = dialogIntentFactory(
+            context,
+            deviceName,
+            batteryText,
+            imageFileName,
+            fallbackDrawableName,
+        )
+        context.startService(dialogIntent(DIALOG_TYPE_CONNECTED_UPDATE)) != null
+    }.onFailure {
+        Log.w("HuaweiPods", "ColorOS connected-card battery refresh failed", it)
+    }.getOrDefault(false)
+
+    private fun dialogIntentFactory(
+        context: Context,
+        deviceName: String,
+        batteryText: String,
+        imageFileName: String?,
+        fallbackDrawableName: String?,
+    ): (Int) -> Intent {
         val classLoader = accessoryClassLoader(context)
         val paramsClass = Class.forName(DIALOG_PARAMS, true, classLoader)
         val params = paramsClass.getDeclaredConstructor().newInstance()
@@ -76,29 +130,16 @@ internal object ColorOsAccessoryPopupBridge {
 
         val presentationDevice = checkNotNull(BluetoothAdapter.getDefaultAdapter())
             .getRemoteDevice(PRESENTATION_DEVICE_ADDRESS)
-        fun dialogIntent(type: Int) = Intent(ACTION_DIALOG).apply {
-            component = ComponentName(ACCESSORY_PACKAGE, SCENE_SERVICE)
-            putExtra("dialog_type", type)
-            putExtra("sdk_version", SDK_VERSION)
-            putExtra("bluetooth_device", presentationDevice)
-            putExtra("dialog_params", params as Parcelable)
-        }
-        checkNotNull(context.startService(dialogIntent(DIALOG_TYPE_NEW_CONNECTION))) {
-            "ColorOS SceneService did not accept the popup request"
-        }
-        // The vendor API models a popup as 0 (open) followed by 2 (connected). Sending only
-        // state 0 makes ColorOS close the card when it observes that audio is already routed.
-        Handler(Looper.getMainLooper()).postDelayed({
-            runCatching {
-                context.startService(dialogIntent(DIALOG_TYPE_CONNECTED_UPDATE))
-            }.onFailure {
-                Log.w("HuaweiPods", "ColorOS connected-card update failed", it)
+        return { type ->
+            Intent(ACTION_DIALOG).apply {
+                component = ComponentName(ACCESSORY_PACKAGE, SCENE_SERVICE)
+                putExtra("dialog_type", type)
+                putExtra("sdk_version", SDK_VERSION)
+                putExtra("bluetooth_device", presentationDevice)
+                putExtra("dialog_params", params as Parcelable)
             }
-        }, 120L)
-        true
-    }.onFailure {
-        Log.w("HuaweiPods", "ColorOS official accessory popup unavailable", it)
-    }.getOrDefault(false)
+        }
+    }
 
     private fun accessoryClassLoader(context: Context): ClassLoader {
         runCatching {

@@ -42,6 +42,9 @@ fun SettingsPage(
     onPersistentNotificationEnabledChange: (Boolean) -> Unit = {},
     lockscreenNotificationEnabled: MutableState<Boolean> = mutableStateOf(true),
     onLockscreenNotificationEnabledChange: (Boolean) -> Unit = {},
+    lowBatteryReminderEnabled: MutableState<Boolean> = mutableStateOf(true),
+    onLowBatteryReminderEnabledChange: (Boolean) -> Unit = {},
+    onPreviewLowBatteryReminder: () -> Unit = {},
     appLanguage: MutableState<Int> = mutableStateOf(AppLocale.SYSTEM),
     onAppLanguageChange: (Int) -> Unit = {},
     notificationClickAction: MutableState<Int> = mutableStateOf(ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP),
@@ -154,6 +157,19 @@ fun SettingsPage(
                     checked = lockscreenNotificationEnabled.value,
                     onCheckedChange = onLockscreenNotificationEnabledChange,
                 )
+                SwitchPreference(
+                    title = stringResource(R.string.low_battery_reminder),
+                    summary = stringResource(R.string.low_battery_reminder_summary),
+                    checked = lowBatteryReminderEnabled.value,
+                    onCheckedChange = onLowBatteryReminderEnabledChange,
+                )
+                if (lowBatteryReminderEnabled.value) {
+                    BasicComponent(
+                        title = stringResource(R.string.low_battery_reminder_preview),
+                        summary = stringResource(R.string.low_battery_reminder_preview_summary),
+                        onClick = onPreviewLowBatteryReminder,
+                    )
+                }
                 if (
                     Build.VERSION.SDK_INT >= 36 &&
                     RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND) ==

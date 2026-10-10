@@ -2,5 +2,6 @@
   "com.android.bluetooth",
   "com.heytap.mydevices",
   "com.heytap.accessory",
+  "com.oplus.wirelesssettings",
   "com.huawei.smartaudio"
 ]

@@ -16,6 +16,7 @@
         <package android:name="com.huawei.smartaudio" />
         <package android:name="com.heytap.accessory" />
         <package android:name="com.heytap.mydevices" />
+        <package android:name="com.oplus.wirelesssettings" />
         <package android:name="com.oplus.melody" />
         <package android:name="com.oplus.wirelesssettings" />
     </queries>
@@ -43,6 +44,10 @@
                 <action android:name="android.bluetooth.headset.profile.action.CONNECTION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".coloros.ColorOsLiveAlertActionReceiver"
+            android:exported="false" />
 
         <service
             android:name=".coloros.ColorOsLiveAlertService"

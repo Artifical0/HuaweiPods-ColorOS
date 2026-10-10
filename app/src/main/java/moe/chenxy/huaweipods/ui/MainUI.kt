@@ -204,6 +204,9 @@ internal fun MainUI(
     val lockscreenNotificationEnabled = remember {
         mutableStateOf(appConfig.lockscreenNotificationEnabled)
     }
+    val lowBatteryReminderEnabled = remember {
+        mutableStateOf(appConfig.lowBatteryReminderEnabled)
+    }
     val earphonePrefs = remember { mutableStateOf(PodImagePrefs.load(prefs)) }
     val checkUpdatesOnLaunch = remember {
         mutableStateOf(lifecyclePrefs.checkUpdatesOnLaunch())
@@ -1168,6 +1171,23 @@ internal fun MainUI(
                             lockscreenNotificationEnabled.value = it
                             ConfigManager.updateLockscreenNotificationEnabled(prefs, xposedService, it)
                             broadcastConfigChanged(context, "com.android.bluetooth")
+                        },
+                        lowBatteryReminderEnabled = lowBatteryReminderEnabled,
+                        onLowBatteryReminderEnabledChange = {
+                            lowBatteryReminderEnabled.value = it
+                            ConfigManager.updateLowBatteryReminderEnabled(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.android.bluetooth")
+                        },
+                        onPreviewLowBatteryReminder = {
+                            sendBluetoothModuleBroadcast(
+                                context,
+                                HuaweiPodsAction.ACTION_PREVIEW_LOW_BATTERY_REMINDER,
+                            )
+                            Toast.makeText(
+                                context,
+                                R.string.low_battery_reminder_preview_sent,
+                                Toast.LENGTH_LONG,
+                            ).show()
                         },
                         appLanguage = appLanguage,
                         onAppLanguageChange = {

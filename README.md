@@ -22,7 +22,7 @@
 
 HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipods.coloros` 的 Android 15+ Xposed 模块，不会被原版 HuaweiPods 的 LSPosed 商店条目覆盖更新。ColorOS 已接入官方“快速设备连接”弹窗、“我的设备”耳机详情入口、系统耳机电量通道及 Android 16+ 流体云电量卡片。
 
-> 从 1.9.0-coloros.1 起本分支只适配 ColorOS，已移除上游的小米 / HyperOS 集成（系统蓝牙详情页、超级岛、融合设备中心等）。HyperOS 用户请使用上游 [HuaweiPods](https://github.com/Nshpiter/HuaweiPods)。
+> 从 1.9.0.1 起本分支只适配 ColorOS，已移除上游的小米 / HyperOS 集成（系统蓝牙详情页、超级岛、融合设备中心等）。HyperOS 用户请使用上游 [HuaweiPods](https://github.com/Nshpiter/HuaweiPods)。
 
 > ColorOS 说明：“我的设备”入口已适配 ColorOS 16.1（`com.heytap.mydevices` 17.4.15）与 ColorOS 17（17.25.10）两代详情页。ColorOS 17 部分目前依据 OnePlus PLK110 `PLK110_17.0.0.102(CN01)` 固件静态核对，尚待实机验证。私有宿主会随系统更新变化，未知版本会退回系统原样，仍保留模块内电量、流体云和通用蓝牙详情页。
 
@@ -30,10 +30,18 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 
 > 当前统一版已集成下列 17 个型号，所有型号使用同一个 APK，不再按型号单独分发测试包。
 
-## 1.9.0-coloros.1
+## 1.9.0.1
+
+> 版本号改为“上游版本.修订号”，ColorOS 标识已在软件名中；安装包为 `HuaweiPods-ColorOS-<版本>-release.apk`。
 
 - 同步上游 HuaweiPods 1.9.0：新增 HUAWEI FreeBuds 7。
 - **“我的设备”电量更灵敏**：耳机连接期间每 15 秒在后台刷新一次电量，亮屏时立即刷新，系统界面不再长时间停留在旧电量。
+- **“我的设备”快捷控制**：HuaweiPods 入口下方按机型显示关闭 / 降噪 / 通透切换，以及低时延、佩戴检测开关，状态随耳机同步。
+- **流体云低时延按钮**：支持低时延的型号可在流体云 / 通知卡片上一键开关低时延。
+- **连接卡片电量实时刷新**：快速设备连接卡片显示左耳 / 右耳 / 耳机盒电量与充电标记，卡片显示期间电量变化会同步更新。
+- **系统蓝牙设置**：设备列表显示左右耳电量，详情页出现“耳机设置”并打开 HuaweiPods（需勾选可选作用域 `com.oplus.wirelesssettings`）。
+- **耳机低电量提醒**：耳机未充电时电量降到 20% 和 10% 各提醒一次，可在设置中关闭或发送测试提醒。
+- **佩戴状态**：读取耳机上报的入耳状态并同步给系统。
 - **只保留 ColorOS 适配**：移除小米 / HyperOS 相关的 Hook、作用域、设置项与依赖（超级岛、焦点通知、融合设备中心、小米蓝牙、系统设置详情页），LSPosed 作用域只剩蓝牙、我的设备、快速设备连接与可选的智慧音频。
 - 关于页改为显示本分支维护者，并单独列出上游项目。
 
@@ -86,7 +94,8 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 
 - 接入 ColorOS 官方“快速设备连接”弹窗（连接与开盖）；Android 16+ 可在流体云显示左右耳与充电盒电量
 - 左右耳 / 充电盒电量写入 ColorOS 系统耳机电量通道，状态栏、蓝牙设置和“我的设备”可直接显示
-- “我的设备”耳机详情页显示 HuaweiPods 电量与设置入口
+- “我的设备”耳机详情页显示 HuaweiPods 电量与设置入口，并可直接切换降噪或低时延
+- 系统蓝牙设置显示左右耳电量与“耳机设置”入口；耳机低电量时提醒
 - 可分别控制常驻耳机通知与锁屏通知
 - 通知可打开模块弹窗、系统设置或华为智慧音频；模块弹窗可直接切换低时延
 - 显示左右耳、充电盒或眼镜左右镜腿电量
@@ -111,6 +120,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 3. 按系统勾选作用域：
 
    - 必选：`com.android.bluetooth`、`com.heytap.mydevices`、`com.heytap.accessory`（`com.heytap.accessory` 用于系统“快速设备连接”官方弹窗）
+   - 可选：`com.oplus.wirelesssettings`（系统蓝牙设置中的耳机电量与“耳机设置”入口）
    - 可选：`com.huawei.smartaudio`（已安装华为智慧音频时，用于 FreeClip 2 空间音频与自定义音效同步）
 
 4. 在 HuaweiPods 内重启相关作用域，或重启手机。

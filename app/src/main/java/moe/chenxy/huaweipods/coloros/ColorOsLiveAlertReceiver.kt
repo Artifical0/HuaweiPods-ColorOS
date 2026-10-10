@@ -22,11 +22,13 @@ import androidx.core.app.NotificationCompat
 import moe.chenxy.huaweipods.MainActivity
 import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.config.ConfigManager
+import moe.chenxy.huaweipods.config.LowLatencyPrefs
 import moe.chenxy.huaweipods.config.PodImageResource
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
 import moe.chenxy.huaweipods.pods.displayName
 import moe.chenxy.huaweipods.pods.isSupported
+import moe.chenxy.huaweipods.pods.supportsLowLatencyControl
 import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.platform.RomFamily
 import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
@@ -253,6 +255,31 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .apply { largeIcon?.let(::setLargeIcon) }
+            .apply {
+                // 支持低时延的型号在卡片上提供一键切换；状态取模块记录的最近一次写入结果。
+                if (route == null || !route.supportsLowLatencyControl || address.isBlank()) return@apply
+                val lowLatency = LowLatencyPrefs.desiredOrNull(prefs, address, route) ?: false
+                val action = ColorOsLiveAlertActionReceiver.toggleLowLatencyIntent(
+                    context,
+                    address,
+                    route,
+                    enabled = !lowLatency,
+                ) ?: return@apply
+                addAction(
+                    0,
+                    context.getString(
+                        if (lowLatency) R.string.coloros_live_alert_low_latency_off
+                        else R.string.coloros_live_alert_low_latency_on,
+                    ),
+                    action,
+                )
+                setSubText(
+                    context.getString(
+                        if (lowLatency) R.string.coloros_live_alert_low_latency_state_on
+                        else R.string.coloros_live_alert_low_latency_state_off,
+                    ),
+                )
+            }
             .requestColorOsLiveAlert(colorOsLiveAlertChipText(left, right, case))
             .build()
         if (Build.VERSION.SDK_INT >= 36) {

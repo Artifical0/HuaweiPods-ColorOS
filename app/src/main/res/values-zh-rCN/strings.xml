@@ -5,6 +5,10 @@
     <string name="app_subtitle">ColorOS 华为耳机独立适配版</string>
     <string name="coloros_live_alert_channel">耳机流体云</string>
     <string name="coloros_live_alert_fallback_title">华为耳机</string>
+    <string name="coloros_live_alert_low_latency_on">开启低时延</string>
+    <string name="coloros_live_alert_low_latency_off">关闭低时延</string>
+    <string name="coloros_live_alert_low_latency_state_on">低时延已开启</string>
+    <string name="coloros_live_alert_low_latency_state_off">低时延已关闭</string>
     <string name="coloros_live_alert_settings">ColorOS 流体云</string>
     <string name="coloros_live_alert_settings_summary">打开系统通知设置并开启“实时提醒”</string>
     <string name="coloros_background_settings">ColorOS 自启动管理</string>
@@ -117,6 +121,14 @@
     <string name="transparency_voice">人声增强</string>
     <string name="lockscreen_notification">锁屏通知</string>
     <string name="lockscreen_notification_summary">允许已启用的耳机常驻通知显示在锁屏和息屏界面</string>
+    <string name="low_battery_reminder">耳机低电量提醒</string>
+    <string name="low_battery_reminder_summary">已连接的耳机未充电时，电量降到 20% 和 10% 各提醒一次</string>
+    <string name="low_battery_reminder_title">%1$s 电量低</string>
+    <string name="low_battery_reminder_preview_sent">已发送测试提醒；如果没有看到通知，请在系统设置中允许“蓝牙”发送通知</string>
+    <string name="low_battery_reminder_preview_summary">立即发出一条低电量提醒，确认通知样式</string>
+    <string name="low_battery_reminder_preview">发送测试提醒</string>
+    <string name="low_battery_reminder_preview_text">测试提醒 · 当前电量：%1$s</string>
+    <string name="low_battery_reminder_text">剩余电量：%1$s，请及时充电</string>
     <string name="persistent_notification">耳机常驻通知</string>
     <string name="persistent_notification_summary">在通知栏显示耳机连接状态和电量</string>
     <string name="freeclip_adaptive_channels">左右耳机自适应</string>
@@ -133,6 +145,7 @@
     <string name="restart_scope_smart_audio">智慧音频（空间音频同步）</string>
     <string name="restart_scope_my_devices">我的设备（ColorOS 耳机详情）</string>
     <string name="restart_scope_quick_connect">快速设备连接（ColorOS 官方弹窗）</string>
+    <string name="restart_scope_wireless_settings">蓝牙设置（ColorOS 耳机设置入口）</string>
     <string name="documentation_title">使用文档</string>
     <string name="documentation_load_failed">文档暂时无法加载</string>
     <string name="documentation_load_failed_summary">请检查网络后重试。站内内容会留在 App 中，外部链接仍由系统浏览器打开。</string>

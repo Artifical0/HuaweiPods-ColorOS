@@ -59,6 +59,8 @@ open class HookEntry : XposedModule() {
                     loadHook("coloros-mydevices", ColorOsMyDevicesHook, classLoader, packageName)
                 "com.heytap.accessory" ->
                     loadHook("coloros-accessory", ColorOsAccessoryFrameworkHook, classLoader, packageName)
+                "com.oplus.wirelesssettings" ->
+                    loadHook("coloros-wirelesssettings", ColorOsWirelessSettingsHook, classLoader, packageName)
             }
         } finally {
             strictInstall.set(previousStrict)
@@ -89,6 +91,7 @@ open class HookEntry : XposedModule() {
         packageName == "com.android.bluetooth" ||
             packageName == "com.heytap.mydevices" ||
             packageName == "com.heytap.accessory" ||
+            packageName == "com.oplus.wirelesssettings" ||
             BuildVariantHooks.supportsPackage(packageName)
 
     internal fun loadHook(

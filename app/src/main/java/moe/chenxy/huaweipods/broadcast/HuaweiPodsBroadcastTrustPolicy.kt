@@ -80,6 +80,8 @@ object HuaweiPodsBroadcastTrustPolicy {
             HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_SET,
             HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH,
             HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET,
+            HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_SET,
+            HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_REFRESH,
             HuaweiPodsAction.ACTION_HUAWEI_GESTURE_SET,
             HuaweiPodsAction.ACTION_HUAWEI_GESTURE_REFRESH,
             HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_SET,
@@ -88,6 +90,7 @@ object HuaweiPodsBroadcastTrustPolicy {
             HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_REFRESH,
             HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND,
             HuaweiPodsAction.ACTION_COLOROS_POPUP_HOST_PROBE,
+            HuaweiPodsAction.ACTION_PREVIEW_LOW_BATTERY_REMINDER,
             HuaweiPodsAction.ACTION_GET_PODS_MAC ->
                 BroadcastActionDomain.APP_CONTROL
 
@@ -99,6 +102,7 @@ object HuaweiPodsBroadcastTrustPolicy {
             HuaweiPodsAction.ACTION_PODS_ANC_CHANGED,
             HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_CHANGED,
             HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED,
+            HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_CHANGED,
             HuaweiPodsAction.ACTION_HUAWEI_GESTURE_CHANGED,
             HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_CHANGED,
             HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_CHANGED,

@@ -37,16 +37,6 @@ internal fun colorOsTwsBatteryInfo(battery: BatteryParams): IntArray {
     )
 }
 
-/**
- * 华为协议没有逐耳佩戴状态；正在充电的耳机必然在盒内。系统只在耳机入盒时展示盒电量，
- * 因此充电映射为“入盒”，已连接但未充电映射为“佩戴”，缺席的一侧保持未知。
- */
-internal fun colorOsEarbudWearStatus(pod: PodParams?): Int = when {
-    pod == null || !pod.isConnected -> COLOR_OS_WEAR_UNKNOWN
-    pod.isCharging -> COLOR_OS_WEAR_IN_CASE
-    else -> COLOR_OS_WEAR_WEARING
-}
-
 /** 状态栏与蓝牙设置使用的单一电量：取在线耳机中较低的一侧，避免高估可用时长。 */
 internal fun colorOsSystemBatteryLevel(battery: BatteryParams): Int =
     listOfNotNull(battery.left, battery.right)
@@ -82,7 +72,12 @@ internal object ColorOsSystemBatteryBridge {
         RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND) == RomFamily.COLOR_OS
     }
 
-    fun publish(context: Context, device: BluetoothDevice, battery: BatteryParams) {
+    fun publish(
+        context: Context,
+        device: BluetoothDevice,
+        battery: BatteryParams,
+        inEar: Boolean? = null,
+    ) {
         if (!enabled) return
         val info = colorOsTwsBatteryInfo(battery)
         val remote = oplusRemoteDevice(context)
@@ -102,8 +97,8 @@ internal object ColorOsSystemBatteryBridge {
                         Int::class.javaPrimitiveType!!,
                     ),
                     device,
-                    colorOsEarbudWearStatus(battery.left),
-                    colorOsEarbudWearStatus(battery.right),
+                    colorOsEarbudWearStatus(battery.left, inEar),
+                    colorOsEarbudWearStatus(battery.right, inEar),
                 )
                 remote.call(
                     "notifyBatteryLevelChanged",
@@ -118,7 +113,7 @@ internal object ColorOsSystemBatteryBridge {
         // OPLUS 在右耳缺席时会把 -1 当作最低值写入标准电量；这里再用在线耳机较低值校正。
         val systemLevel = colorOsSystemBatteryLevel(battery)
         if (systemLevel >= 0) setAndroidBatteryLevel(context, device, systemLevel)
-        Log.d(TAG, "ColorOS battery published info=${info.joinToString()} system=$systemLevel")
+        Log.d(TAG, "ColorOS battery published info=${info.joinToString()} system=$systemLevel inEar=$inEar")
     }
 
     fun clear(context: Context, device: BluetoothDevice) {

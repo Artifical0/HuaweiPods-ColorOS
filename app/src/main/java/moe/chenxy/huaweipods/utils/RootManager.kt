@@ -7,6 +7,7 @@ object RootManager {
     private val restartOrder = listOf(
         "com.heytap.accessory",
         "com.heytap.mydevices",
+        "com.oplus.wirelesssettings",
         "com.huawei.smartaudio",
         "com.android.bluetooth",
     )

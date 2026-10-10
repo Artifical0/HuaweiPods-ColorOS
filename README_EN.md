@@ -18,16 +18,22 @@
 
 HuaweiPods ColorOS is an Android 15+ Xposed module with the independent application ID `io.github.artifical0.huaweipods.coloros`, so the original HuaweiPods LSPosed marketplace entry cannot replace it. ColorOS integration includes the official Quick Device Connect popup, the My Devices headset-detail entry, the system earphone battery channel, and an Android 16+ Live Alert / Fluid Cloud battery card.
 
-> Starting with 1.9.0-coloros.1 this fork targets ColorOS only. The upstream Xiaomi / HyperOS integrations (system Bluetooth detail page, Super Island, Fusion Device Center, and so on) have been removed; HyperOS users should use upstream [HuaweiPods](https://github.com/Nshpiter/HuaweiPods).
+> Starting with 1.9.0.1 this fork targets ColorOS only. The upstream Xiaomi / HyperOS integrations (system Bluetooth detail page, Super Island, Fusion Device Center, and so on) have been removed; HyperOS users should use upstream [HuaweiPods](https://github.com/Nshpiter/HuaweiPods).
 
 > The My Devices entry supports both the ColorOS 16.1 (`com.heytap.mydevices` 17.4.15) and ColorOS 17 (17.25.10) detail pages. The ColorOS 17 work was checked statically against OnePlus PLK110 `PLK110_17.0.0.102(CN01)` firmware and still needs on-device verification. Private hosts change between system updates; unknown builds fall back to the stock pages while keeping the module UI, Live Alerts, and the standard Bluetooth detail page.
 
 The unified build supports the 17 models below in one APK. Model-specific test APKs are no longer distributed.
 
-## 1.9.0-coloros.1
+## 1.9.0.1
+
+> Versions now follow `<upstream version>.<fork revision>`; the ColorOS label lives in the app name, and APKs are named `HuaweiPods-ColorOS-<version>-release.apk`.
 
 - Syncs upstream HuaweiPods 1.9.0: adds HUAWEI FreeBuds 7.
 - **More responsive My Devices battery**: while earbuds are connected, battery is refreshed in the background every 15 seconds and immediately when the screen turns on.
+- **Quick controls in My Devices**: the HuaweiPods entry gains an Off / Noise cancelling / Awareness switch or a low-latency toggle, depending on the model, synced with the earbuds.
+- **System Bluetooth settings**: the device list shows left/right battery and the detail page gets an earphone-settings entry that opens HuaweiPods (requires the optional `com.oplus.wirelesssettings` scope).
+- **Low battery reminder** when an earbud that is not charging drops to 20% and again at 10%; can be turned off or previewed in settings.
+- **Wear state**: the earbuds' in-ear report is forwarded to the system.
 - **ColorOS only**: removes the Xiaomi / HyperOS hooks, scopes, settings, and dependencies (Super Island, focus notifications, Fusion Device Center, Xiaomi Bluetooth, the Settings detail page). LSPosed scopes are now Bluetooth, My Devices, Quick Device Connect, and optionally Huawei AI Life audio.
 - The About page now shows this fork's maintainer and lists the upstream project separately.
 
@@ -82,7 +88,9 @@ The table lists currently integrated capabilities. Unlisted official features sh
 - **ANC dial** for FreeBuds 3 spatial noise cancellation adjustment only.
 - **ColorOS Quick Device Connect popup** on connection and when the case is opened, plus **Fluid Cloud** with left, right, and case battery levels on Android 16+.
 - **System earphone battery channel**: the status bar, Bluetooth settings, and My Devices show left, right, and case battery levels.
-- **My Devices** headset detail page shows HuaweiPods battery and a settings entry.
+- **My Devices** headset detail page shows HuaweiPods battery, a settings entry, and noise-control, low-latency and wear-detection quick controls.
+- **Fluid Cloud** card offers a one-tap low-latency toggle on supported models; the **Quick Connect** card shows left / right / case battery and refreshes while visible.
+- **System Bluetooth settings** show left/right battery and an earphone-settings entry; low-battery reminders.
 - Independent switches for the persistent headset notification and lock-screen notifications.
 - Notification taps can open the module popup, system settings, or Huawei Smart Audio; verified models can toggle low latency in the popup.
 - **Manual model binding** by Bluetooth address when a device has been renamed or cannot be identified automatically.
@@ -104,6 +112,7 @@ The table lists currently integrated capabilities. Unlisted official features sh
 2. Enable the module in LSPosed.
 3. Select the scopes for your system:
    - Required: `com.android.bluetooth`, `com.heytap.mydevices`, and `com.heytap.accessory` (`com.heytap.accessory` enables the system Quick Device Connect popup).
+   - Optional: `com.oplus.wirelesssettings` (earphone battery and settings entry in the system Bluetooth settings).
    - Optional: `com.huawei.smartaudio` (when Huawei AI Life/Smart Audio is installed, for FreeClip 2 spatial-audio and custom-EQ synchronization).
 4. Reboot the phone, or restart the scoped apps from HuaweiPods.
 5. On ColorOS 16+, open **ColorOS Fluid Cloud** in HuaweiPods settings and enable **Live alerts** in the system notification settings.
