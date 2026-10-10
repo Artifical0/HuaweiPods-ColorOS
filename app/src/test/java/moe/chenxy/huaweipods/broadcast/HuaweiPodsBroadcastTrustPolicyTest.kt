@@ -12,12 +12,9 @@ class HuaweiPodsBroadcastTrustPolicyTest {
     fun `trusted App control senders should pass all control requests`() {
         val trustedSenders = listOf(
             HuaweiPodsBroadcastTrustPolicy.PACKAGE_APP,
-            HuaweiPodsBroadcastTrustPolicy.PACKAGE_SETTINGS,
-            HuaweiPodsBroadcastTrustPolicy.PACKAGE_MILINK,
             HuaweiPodsBroadcastTrustPolicy.PACKAGE_BLUETOOTH,
             HuaweiPodsBroadcastTrustPolicy.PACKAGE_HEYTAP_MYDEVICES,
             HuaweiPodsBroadcastTrustPolicy.PACKAGE_HEYTAP_ACCESSORY,
-            HuaweiPodsBroadcastTrustPolicy.PACKAGE_XIAOMI_BLUETOOTH,
         )
         trustedSenders.forEach { sender ->
             assertTrue("Sender $sender should be trusted for app control", HuaweiPodsBroadcastTrustPolicy.isTrustedAppControlSender(sender))
@@ -33,6 +30,8 @@ class HuaweiPodsBroadcastTrustPolicyTest {
             HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_SET,
             HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH,
             HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET,
+            HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_SET,
+            HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_REFRESH,
             HuaweiPodsAction.ACTION_HUAWEI_GESTURE_SET,
             HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_SET,
             HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_PRESET_SET,
@@ -54,6 +53,7 @@ class HuaweiPodsBroadcastTrustPolicyTest {
             "com.malicious.fakeapp",
             "com.fake.settings",
             "com.other.app",
+            "com.xiaomi.bluetooth",
         )
         val controlActions = listOf(
             HuaweiPodsAction.ACTION_CONNECT_POD_REQUEST,
@@ -82,7 +82,7 @@ class HuaweiPodsBroadcastTrustPolicyTest {
     fun `trusted bluetooth sender should pass state and alive broadcasts`() {
         val bluetoothSender = HuaweiPodsBroadcastTrustPolicy.PACKAGE_BLUETOOTH
         assertTrue(HuaweiPodsBroadcastTrustPolicy.isTrustedBluetoothStateSender(bluetoothSender))
-        assertTrue(HuaweiPodsBroadcastTrustPolicy.isTrustedBluetoothStateSender("com.xiaomi.bluetooth"))
+        assertFalse(HuaweiPodsBroadcastTrustPolicy.isTrustedBluetoothStateSender("com.xiaomi.bluetooth"))
 
         val stateActions = listOf(
             HuaweiPodsAction.ACTION_PODS_CONNECTED,

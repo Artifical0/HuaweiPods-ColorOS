@@ -65,7 +65,7 @@ jobs:
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
 
           if [ -n "$SIGNING_KEY" ]; then
-            OUT_NAME="HuaweiPods-${VERSION_NAME}-release.apk"
+            OUT_NAME="HuaweiPods-ColorOS-${VERSION_NAME}-release.apk"
             umask 077
             trap 'rm -f /tmp/huaweipods-release.jks' EXIT
             echo "$SIGNING_KEY" | base64 -d > /tmp/huaweipods-release.jks
@@ -79,7 +79,7 @@ jobs:
             "${BUILD_TOOLS}apksigner" verify --verbose "./$OUT_NAME"
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
-            OUT_NAME="HuaweiPods-${VERSION_NAME}-ci.apk"
+            OUT_NAME="HuaweiPods-ColorOS-${VERSION_NAME}-ci.apk"
             cp "$UNSIGNED_APK" "./$OUT_NAME"
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi

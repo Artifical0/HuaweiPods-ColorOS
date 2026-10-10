@@ -20,8 +20,8 @@ android {
         minSdk = 35
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 19
-        versionName = "1.8.3-coloros.1"
+        versionCode = 22
+        versionName = "1.9.0-coloros.1-rc3"
         buildConfigField("long", "BUILD_TIMESTAMP", moduleBuildTimestamp.toString())
     }
 
@@ -119,7 +119,6 @@ dependencies {
     implementation(libs.navigation3.runtime)
 
     // HyperOS Focus Island API
-    implementation(libs.focus.api)
 }
 
 configurations.matching { it.name.startsWith("release") }.configureEach {

@@ -10,11 +10,11 @@ class PodImageProviderAccessPolicyTest {
         listOf(
             "io.github.artifical0.huaweipods.coloros",
             "com.android.bluetooth",
-            "com.android.settings",
-            "com.milink.service",
-            "com.xiaomi.bluetooth",
             "com.heytap.accessory",
         ).forEach { assertTrue(it, PodImageProviderAccessPolicy.mayOpenImage(it)) }
+
+        assertFalse(PodImageProviderAccessPolicy.mayOpenImage("com.milink.service"))
+        assertFalse(PodImageProviderAccessPolicy.mayOpenImage("com.xiaomi.bluetooth"))
 
         assertFalse(PodImageProviderAccessPolicy.mayOpenImage("com.huawei.smartaudio"))
         assertFalse(PodImageProviderAccessPolicy.mayOpenImage("com.example.thirdparty"))
@@ -25,7 +25,7 @@ class PodImageProviderAccessPolicyTest {
     fun `shared bluetooth uid may open images through an allowed package`() {
         assertTrue(
             PodImageProviderAccessPolicy.mayOpenImage(
-                listOf("com.android.bluetooth", "com.xiaomi.bluetooth"),
+                listOf("com.example.shared", "com.android.bluetooth"),
             ),
         )
         assertFalse(

@@ -493,7 +493,6 @@ private fun EarphoneDetailActions(
 
 private val commonRestartScopeOptions = listOf(
     RestartScope("com.android.bluetooth", R.string.restart_scope_bluetooth_service),
-    RestartScope("com.android.settings", R.string.restart_scope_settings),
     RestartScope("com.huawei.smartaudio", R.string.restart_scope_smart_audio),
 )
 
@@ -501,13 +500,10 @@ private fun restartScopeOptionsForCurrentRom(): List<RestartScope> =
     commonRestartScopeOptions + when (
         RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND)
     ) {
-        RomFamily.HYPER_OS -> listOf(
-            RestartScope("com.milink.service", R.string.restart_scope_milink_service),
-            RestartScope("com.xiaomi.bluetooth", R.string.restart_scope_mi_bluetooth),
-        )
         RomFamily.COLOR_OS -> listOf(
             RestartScope("com.heytap.mydevices", R.string.restart_scope_my_devices),
             RestartScope("com.heytap.accessory", R.string.restart_scope_quick_connect),
+            RestartScope("com.oplus.wirelesssettings", R.string.restart_scope_wireless_settings),
         )
         RomFamily.GENERIC_ANDROID -> emptyList()
     }

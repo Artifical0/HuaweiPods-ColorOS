@@ -44,7 +44,7 @@ class SmartAudioFreeClip2BridgePolicyTest {
                 "io.github.artifical0.huaweipods.coloros",
             ),
         )
-        assertTrue(
+        assertFalse(
             SmartAudioFreeClip2BridgePolicy.isTrustedEqualizerRequestSender(
                 "com.milink.service",
             ),

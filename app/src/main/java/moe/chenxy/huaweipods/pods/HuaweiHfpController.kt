@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -18,6 +19,8 @@ import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.LowLatencyPrefs
 import moe.chenxy.huaweipods.hook.ColorOsSystemBatteryBridge
 import moe.chenxy.huaweipods.hook.Log
+import moe.chenxy.huaweipods.platform.RomFamily
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.smartaudio.OfficialImageIdentityBridge
 import moe.chenxy.huaweipods.utils.miuiStrongToast.MiuiStrongToastUtil
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
@@ -33,6 +36,8 @@ object HuaweiHfpController {
     private const val ANC_CONFIRM_DELAY_MS = 450L
     private const val ANC_REFRESH_MIN_INTERVAL_MS = 750L
     private const val BACKGROUND_BATTERY_REFRESH_INTERVAL_MS = 30_000L
+    /** ColorOS 的状态栏、设备空间直接读取系统电量通道，刷新更频繁才能及时反映电量变化。 */
+    private const val COLOR_OS_BACKGROUND_BATTERY_REFRESH_INTERVAL_MS = 15_000L
     private const val GESTURE_CONFIRM_DELAY_MS = 300L
     private const val GESTURE_REFRESH_MIN_INTERVAL_MS = 750L
     private const val EQUALIZER_CONFIRM_DELAY_MS = 450L
@@ -42,6 +47,7 @@ object HuaweiHfpController {
     private const val FREECLIP2_AUDIO_REFRESH_MIN_INTERVAL_MS = 2_500L
     private const val DEVICE_INFO_REFRESH_MIN_INTERVAL_MS = 60_000L
     private const val LOW_LATENCY_AUTO_APPLY_DELAY_MS = 2_500L
+    private const val WEAR_DETECTION_CONFIRM_DELAY_MS = 300L
     private const val LOW_LATENCY_AUTO_APPLY_RETRY_DELAY_MS = 2_500L
     private const val LOW_LATENCY_AUTO_APPLY_MAX_ATTEMPTS = 2
     private const val FREEBUDS3_SNAPSHOT_TTL_MS = 10 * 60_000L
@@ -59,6 +65,9 @@ object HuaweiHfpController {
     private var currentBattery: BatteryParams? = null
     @Volatile
     private var currentBatteryIsCached = false
+    /** 耳机主动上报的整体入耳状态；null 表示本次会话尚未收到。 */
+    @Volatile
+    private var currentInEar: Boolean? = null
     @Volatile
     private var currentAnc = HuaweiAncState(NoiseControlMode.UNKNOWN)
     @Volatile
@@ -85,7 +94,6 @@ object HuaweiHfpController {
     private var lowLatencyAutoApplyRequest: LowLatencyAutoApplyRequest? = null
     private var lowLatencyAppliedGeneration: Long? = null
     private val freeClip2AudioStateTracker = FreeClip2AudioStateTracker()
-    private val batteryIslandTriggerPolicy = BatteryIslandTriggerPolicy()
     private val freeBuds3SnapshotStore = FreeBuds3StateSnapshotStore()
     private val sessionStateLock = Any()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -117,7 +125,7 @@ object HuaweiHfpController {
         /*
          * “已受理”只表示智慧音频调用了异步查询 API。设备页未创建时，官方 API
          * 可能不会经过 SpatialAudioWidget.setSpatialAudioState()，因而没有任何状态
-         * 回调。此处是只读查询，超时后必须直接向耳机核实，否则 Settings/MiLink
+         * 回调。此处是只读查询，超时后必须直接向耳机核实，否则系统界面
          * 会永久停留在各自的旧缓存。空间音频写入仍沿用下方更保守的冲突策略。
          */
         Log.i(
@@ -130,6 +138,23 @@ object HuaweiHfpController {
     private val lowLatencyAutoApplyRunnable = Runnable {
         applyAutoLowLatency()
     }
+    private val isColorOs: Boolean by lazy {
+        RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND) == RomFamily.COLOR_OS
+    }
+    private val backgroundBatteryRefreshIntervalMs: Long
+        get() = if (isColorOs) {
+            COLOR_OS_BACKGROUND_BATTERY_REFRESH_INTERVAL_MS
+        } else {
+            BACKGROUND_BATTERY_REFRESH_INTERVAL_MS
+        }
+    private var screenOnReceiverRegistered = false
+    /** 亮屏时向耳机读取一次电量，解锁后系统界面看到的是当前电量而不是旧缓存。 */
+    private val screenOnReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != Intent.ACTION_SCREEN_ON) return
+            if (device != null) requestPrivateBattery()
+        }
+    }
     private var backgroundBatteryRefreshActive = false
     private val backgroundBatteryRefreshRunnable = object : Runnable {
         override fun run() {
@@ -139,7 +164,7 @@ object HuaweiHfpController {
                 return
             }
             requestPrivateBattery()
-            mainHandler.postDelayed(this, BACKGROUND_BATTERY_REFRESH_INTERVAL_MS)
+            mainHandler.postDelayed(this, backgroundBatteryRefreshIntervalMs)
         }
     }
 
@@ -163,11 +188,16 @@ object HuaweiHfpController {
                 }
         }
         receiverRegistered = false
+        if (screenOnReceiverRegistered && receiverContext != null) {
+            runCatching { receiverContext.unregisterReceiver(screenOnReceiver) }
+        }
+        screenOnReceiverRegistered = false
         HuaweiL2capAncController.disconnect(device)
         context = null
         device = null
         sessionRoute = HuaweiDeviceRoute.UNSUPPORTED
         currentBattery = null
+        currentInEar = null
         currentAnc = HuaweiAncState(NoiseControlMode.UNKNOWN)
         currentDeviceInfoIdentity = null
         connectedBroadcastSent = false
@@ -252,6 +282,8 @@ object HuaweiHfpController {
                         sendConnectionState("connected")
                         sendConnected(force = true)
                         currentBattery?.let { sendBattery(it, cached = currentBatteryIsCached) }
+                        // 我的设备 / 模块界面打开时读取耳机实时电量，而不只是重发缓存（受 10 秒限流）。
+                        if (isColorOs) requestPrivateBattery()
                         if (receivedIntent.getBooleanExtra(
                                 HuaweiPodsAction.EXTRA_RESTORE_NOTIFICATION,
                                 false,
@@ -329,6 +361,14 @@ object HuaweiHfpController {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
                     setLowLatency(receivedIntent)
                 }
+                HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_SET -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
+                    setWearDetection(receivedIntent)
+                }
+                HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_REFRESH -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = false)) return
+                    requestWearDetectionState()
+                }
                 HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND -> {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
                     if (BuildConfig.DEBUG) sendLegacyDebugHex(receivedIntent.getStringExtra("hex").orEmpty())
@@ -347,6 +387,12 @@ object HuaweiHfpController {
                 HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_SET -> {
                     if (!targetsCurrentFreeClip2Session(receivedIntent)) return
                     setFreeClip2Audio(receivedIntent)
+                }
+                HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_SET,
+                HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_REFRESH -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
+                    if (sessionRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS7) return
+                    handleFreeBuds7Spatial(receivedIntent)
                 }
                 HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH -> {
                     if (!targetsCurrentFreeClip2Session(receivedIntent)) return
@@ -428,6 +474,7 @@ object HuaweiHfpController {
             }
             currentBattery = null
             currentBatteryIsCached = false
+            currentInEar = null
             currentAnc = HuaweiAncState(NoiseControlMode.UNKNOWN)
             currentAncIsCached = false
             currentAncLevel = 0
@@ -494,7 +541,6 @@ object HuaweiHfpController {
             sendConnected()
             sendBattery(battery)
             MiuiStrongToastUtil.showPodsNotificationByMiuiBt(context, battery, device)
-            maybeShowBatteryIsland(context, battery, device)
             Log.i(TAG, "Huawei battery parsed device=${device.address} values=${result.values}")
             battery
         }
@@ -648,6 +694,36 @@ object HuaweiHfpController {
             return false
         }
         return true
+    }
+
+    private fun handleFreeBuds7Spatial(intent: Intent) {
+        val ctx = context ?: return
+        val target = device ?: return
+        val generation = sessionGeneration
+        val address = target.address
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS7
+        val publish: (FreeClip2SpatialAudioMode?) -> Unit = { mode ->
+            if (mode != null && isCurrentSession(generation, address, route)) {
+                val fill: Intent.() -> Unit = {
+                    putExtra(HuaweiPodsAction.EXTRA_HUAWEI_SPATIAL_MODE, mode.extraValue)
+                }
+                sendAppBroadcast(HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_CHANGED, fill)
+                sendExternalBroadcast(HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_CHANGED, fill)
+                Log.i(TAG, "FreeBuds 7 spatial confirmed mode=$mode")
+            }
+        }
+        if (intent.action == HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_SET) {
+            val mode = FreeClip2SpatialAudioMode.fromExtraValue(
+                intent.getStringExtra(HuaweiPodsAction.EXTRA_HUAWEI_SPATIAL_MODE),
+            ) ?: return
+            HuaweiFreeBuds7Controller.setSpatial(ctx, target, mode) { success ->
+                if (!isCurrentSession(generation, address, route)) return@setSpatial
+                if (success) publish(mode)
+                else HuaweiFreeBuds7Controller.requestSpatial(ctx, target, publish)
+            }
+        } else {
+            HuaweiFreeBuds7Controller.requestSpatial(ctx, target, publish)
+        }
     }
 
     private fun targetsCurrentFreeClip2Session(intent: Intent): Boolean {
@@ -1305,7 +1381,7 @@ object HuaweiHfpController {
             mainHandler.removeCallbacks(freeClip2AudioConfirmationRunnable)
             cancelPendingSmartAudioSpatialWrite()
             cancelPendingSmartAudioAudioQuery()
-            batteryIslandTriggerPolicy.onNewSession()
+            currentInEar = null
             sessionGeneration++
             Log.i(
                 TAG,
@@ -1391,9 +1467,13 @@ object HuaweiHfpController {
                             normalizedBattery,
                             activeDevice,
                         )
-                        maybeShowBatteryIsland(currentContext, normalizedBattery, activeDevice)
                         Log.i(TAG, "Huawei RFCOMM battery updated device=$requestedAddress")
                     }
+                }
+            },
+            onInEar = { inEar ->
+                if (isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                    updateInEarState(inEar)
                 }
             },
             onComplete = { success ->
@@ -1677,37 +1757,15 @@ object HuaweiHfpController {
         mainHandler.removeCallbacks(backgroundBatteryRefreshRunnable)
         mainHandler.postDelayed(
             backgroundBatteryRefreshRunnable,
-            BACKGROUND_BATTERY_REFRESH_INTERVAL_MS,
+            backgroundBatteryRefreshIntervalMs,
         )
-        Log.i(TAG, "Huawei background battery refresh started interval=$BACKGROUND_BATTERY_REFRESH_INTERVAL_MS")
+        Log.i(TAG, "Huawei background battery refresh started interval=$backgroundBatteryRefreshIntervalMs")
     }
 
     private fun stopBackgroundBatteryRefresh() {
         backgroundBatteryRefreshActive = false
         batteryRequestInFlight = false
         mainHandler.removeCallbacks(backgroundBatteryRefreshRunnable)
-    }
-
-    private fun maybeShowBatteryIsland(
-        context: Context,
-        battery: BatteryParams,
-        device: BluetoothDevice,
-    ) {
-        if (ConfigManager.islandMode() != ConfigManager.ISLAND_MODE_MODULE) return
-        val hasConnectedEarBattery = battery.left?.isConnected == true || battery.right?.isConnected == true
-        if (!batteryIslandTriggerPolicy.shouldTrigger(
-                address = device.address,
-                hasConnectedEarBattery = hasConnectedEarBattery,
-                now = SystemClock.elapsedRealtime(),
-            )
-        ) return
-        runCatching {
-            MiuiStrongToastUtil.showPodsBatteryToastByMiuiBt(context, battery, device)
-        }.onSuccess {
-            Log.i(TAG, "Huawei battery island requested device=${device.address}")
-        }.onFailure {
-            Log.e(TAG, "Huawei battery island request failed safely device=${device.address}", it)
-        }
     }
 
     private fun requestAncState(
@@ -1793,6 +1851,93 @@ object HuaweiHfpController {
                 "Huawei gesture state confirmed device=$activeAddress double=${state.doubleTap} triple=${state.tripleTap} swipe=${state.swipe}",
             )
         }
+    }
+
+    /**
+     * “我的设备”等外部入口的佩戴检测开关。会话已确认机型，直接使用抓包验证过的 2B10 写入与
+     * 2B11 回读；写入后以回读结果为准再广播，避免界面显示假成功。
+     */
+    private fun setWearDetection(intent: Intent) {
+        val currentContext = context ?: return
+        val currentDevice = device ?: return
+        val requestedRoute = sessionRoute
+        val packet = if (intent.hasExtra(HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED)) {
+            HuaweiWearDetectionController.setPacket(
+                requestedRoute,
+                intent.getBooleanExtra(HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED, false),
+            )
+        } else {
+            null
+        }
+        if (packet == null) {
+            Log.w(TAG, "Huawei wear-detection command ignored route=$requestedRoute")
+            return
+        }
+        val requestedEnabled = intent.getBooleanExtra(
+            HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED,
+            false,
+        )
+        val requestedAddress = currentDevice.address
+        val requestedGeneration = sessionGeneration
+        HuaweiL2capAncController.sendRawPacketOnce(
+            context = currentContext,
+            device = currentDevice,
+            route = requestedRoute,
+            packet = packet,
+            description = "wear-detection enabled=$requestedEnabled route=$requestedRoute",
+        ) { success ->
+            if (!isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                return@sendRawPacketOnce
+            }
+            if (!success) {
+                Log.w(TAG, "Huawei wear-detection write failed device=$requestedAddress")
+                requestWearDetectionState(writeExpected = requestedEnabled)
+                return@sendRawPacketOnce
+            }
+            mainHandler.postDelayed({
+                if (isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                    requestWearDetectionState(writeExpected = requestedEnabled)
+                }
+            }, WEAR_DETECTION_CONFIRM_DELAY_MS)
+        }
+    }
+
+    private fun requestWearDetectionState(writeExpected: Boolean? = null) {
+        val currentContext = context ?: return
+        val currentDevice = device ?: return
+        val requestedRoute = sessionRoute
+        val packet = HuaweiWearDetectionController.stateQueryPacket(requestedRoute) ?: return
+        val requestedAddress = currentDevice.address
+        val requestedGeneration = sessionGeneration
+        HuaweiL2capAncController.requestRawPacketOnce(
+            context = currentContext,
+            device = currentDevice,
+            route = requestedRoute,
+            packet = packet,
+            description = "wear-detection-state route=$requestedRoute",
+            responseComplete = { HuaweiWearDetectionController.parseState(it) != null },
+        ) { response ->
+            if (!isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                return@requestRawPacketOnce
+            }
+            val enabled = HuaweiWearDetectionController.parseState(response) ?: run {
+                Log.w(TAG, "Huawei wear-detection state unavailable device=$requestedAddress")
+                return@requestRawPacketOnce
+            }
+            sendWearDetectionState(enabled, writeSuccess = writeExpected?.let { it == enabled })
+            Log.i(TAG, "Huawei wear-detection state confirmed enabled=$enabled device=$requestedAddress")
+        }
+    }
+
+    private fun sendWearDetectionState(enabled: Boolean, writeSuccess: Boolean? = null) {
+        val fillState: Intent.() -> Unit = {
+            putExtra(HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_ENABLED, enabled)
+            writeSuccess?.let {
+                putExtra(HuaweiPodsAction.EXTRA_HUAWEI_WEAR_DETECTION_WRITE_SUCCESS, it)
+            }
+        }
+        sendAppBroadcast(HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_CHANGED, fillState)
+        sendExternalBroadcast(HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_CHANGED, fillState)
     }
 
     private fun setHuaweiEqualizerPreset(intent: Intent) {
@@ -2082,12 +2227,16 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_SET)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_REFRESH)
             if (BuildConfig.DEBUG) {
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND)
             }
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_GESTURE_SET)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_GESTURE_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_PRESET_SET)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_REFRESH)
@@ -2096,6 +2245,16 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_STATE)
         }, Context.RECEIVER_EXPORTED)
         receiverRegistered = true
+        if (isColorOs && !screenOnReceiverRegistered) {
+            runCatching {
+                ctx.registerReceiver(
+                    screenOnReceiver,
+                    IntentFilter(Intent.ACTION_SCREEN_ON),
+                    Context.RECEIVER_NOT_EXPORTED,
+                )
+            }.onSuccess { screenOnReceiverRegistered = true }
+                .onFailure { Log.w(TAG, "Screen-on battery refresh unavailable", it) }
+        }
     }
 
     private fun sendConnected(force: Boolean = false) {
@@ -2130,7 +2289,7 @@ object HuaweiHfpController {
             val currentContext = context
             val currentDevice = device
             if (currentContext != null && currentDevice != null) {
-                ColorOsSystemBatteryBridge.publish(currentContext, currentDevice, battery)
+                ColorOsSystemBatteryBridge.publish(currentContext, currentDevice, battery, currentInEar)
             }
         }
         sendAppBroadcast(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED) {
@@ -2143,6 +2302,16 @@ object HuaweiHfpController {
             putBatteryExtras(battery)
             if (cached) putExtra(EXTRA_STATE_CACHED, true)
         }
+    }
+
+    private fun updateInEarState(inEar: Boolean) {
+        if (currentInEar == inEar) return
+        currentInEar = inEar
+        Log.i(TAG, "Huawei in-ear state changed inEar=$inEar device=${device?.address}")
+        val currentContext = context ?: return
+        val currentDevice = device ?: return
+        val battery = currentBattery?.takeUnless { currentBatteryIsCached } ?: return
+        ColorOsSystemBatteryBridge.publish(currentContext, currentDevice, battery, inEar)
     }
 
     private fun sendAnc(
@@ -2292,9 +2461,6 @@ object HuaweiHfpController {
         val ctx = context ?: return
         val currentDevice = device
         listOf(
-            "com.milink.service",
-            "com.xiaomi.bluetooth",
-            "com.android.settings",
             "com.heytap.mydevices",
         ).forEach { targetPackage ->
             Intent(action).apply {
