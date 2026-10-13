@@ -47,6 +47,13 @@ object HuaweiPodsBroadcastTrustPolicy {
         PACKAGE_BLUETOOTH,
     )
 
+    private val myDevicesStateActions = setOf(
+        HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED,
+        HuaweiPodsAction.ACTION_PODS_ANC_CHANGED,
+        HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED,
+        HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_CHANGED,
+    )
+
     /** 判断是否为合法的控制类广播发送者 */
     fun isTrustedAppControlSender(packageName: String?): Boolean =
         packageName != null && packageName in trustedAppControlSenders
@@ -54,6 +61,15 @@ object HuaweiPodsBroadcastTrustPolicy {
     /** 判断是否为合法的蓝牙状态类广播发送者 */
     fun isTrustedBluetoothStateSender(packageName: String?): Boolean =
         packageName != null && packageName in trustedBluetoothStateSenders
+
+    /** Packages must come from PackageManager for the kernel-provided Messenger sendingUid. */
+    internal fun shouldAcceptBoundHeadsetEvent(action: String?, uidPackages: Array<String>?): Boolean =
+        isHeadsetLifecycleAction(action) && uidPackages?.any(::isTrustedBluetoothStateSender) == true
+
+    /** 我的设备只消费蓝牙进程确认的四类状态，不接受控制动作或其他宿主伪造的状态。 */
+    fun shouldAcceptMyDevicesStateBroadcast(action: String?, senderPackage: String?): Boolean =
+        HuaweiPodsAction.canonical(action) in myDevicesStateActions &&
+            isTrustedBluetoothStateSender(senderPackage)
 
     /** 判断是否为合法的智慧音频发送者 */
     fun isTrustedSmartAudioSender(packageName: String?): Boolean =

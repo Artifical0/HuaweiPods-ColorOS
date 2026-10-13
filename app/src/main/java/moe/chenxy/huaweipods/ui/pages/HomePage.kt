@@ -1,5 +1,7 @@
 package moe.chenxy.huaweipods.ui.pages
 
+import moe.chenxy.huaweipods.ui.ModuleHealth
+
 import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
@@ -46,7 +48,7 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 fun HomePage(
     modifier: Modifier = Modifier,
     xposedService: XposedService?,
-    bluetoothServiceResponsive: Boolean,
+    bluetoothServiceResponsive: ModuleHealth,
     bluetoothEnabled: Boolean,
     bondedDeviceCount: Int,
     onBluetoothStatusClick: () -> Unit,
@@ -100,7 +102,7 @@ fun HomePage(
 private fun StatusGrid(
     active: Boolean,
     inactiveSummary: String,
-    bluetoothServiceResponsive: Boolean,
+    bluetoothServiceResponsive: ModuleHealth,
     bluetoothEnabled: Boolean,
     bondedDeviceCount: Int,
     onBluetoothStatusClick: () -> Unit,
@@ -137,8 +139,8 @@ private fun StatusGrid(
 }
 
 @Composable
-private fun StatusCard(active: Boolean, inactiveSummary: String, bluetoothServiceResponsive: Boolean, modifier: Modifier = Modifier) {
-    val serviceTimeout = active && !bluetoothServiceResponsive
+private fun StatusCard(active: Boolean, inactiveSummary: String, bluetoothServiceResponsive: ModuleHealth, modifier: Modifier = Modifier) {
+    val serviceTimeout = active && bluetoothServiceResponsive != ModuleHealth.ONLINE
     val statusColor = when {
         !active -> Color(0xFFFF5A52)
         serviceTimeout -> Color(0xFFFF9F0A)
@@ -171,6 +173,8 @@ private fun StatusCard(active: Boolean, inactiveSummary: String, bluetoothServic
                 Text(
                     text = when {
                         !active -> "LSPosed 未激活"
+                        bluetoothServiceResponsive == ModuleHealth.CHECKING -> "模块检查中"
+                        bluetoothServiceResponsive == ModuleHealth.RELOAD_REQUIRED -> "模块需要重载"
                         serviceTimeout -> "模块服务超时"
                         else -> "模块已激活"
                     },
@@ -181,6 +185,8 @@ private fun StatusCard(active: Boolean, inactiveSummary: String, bluetoothServic
                 Text(
                     text = when {
                         !active -> inactiveSummary
+                        bluetoothServiceResponsive == ModuleHealth.CHECKING -> "正在等待蓝牙模块响应"
+                        bluetoothServiceResponsive == ModuleHealth.RELOAD_REQUIRED -> "旧版本仍运行，请重启作用域"
                         serviceTimeout -> "模块服务未响应"
                         else -> "模块服务已连接"
                     },

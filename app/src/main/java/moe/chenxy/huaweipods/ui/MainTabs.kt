@@ -76,7 +76,7 @@ internal fun MainTabsScaffold(
     overlayBottomBar: Boolean,
     pageBottomContentPadding: Dp,
     xposedService: XposedService?,
-    bluetoothServiceResponsive: Boolean,
+    bluetoothServiceResponsive: ModuleHealth,
     bluetoothEnabled: Boolean,
     bondedDeviceCount: Int,
     onBluetoothStatusClick: () -> Unit,
@@ -286,7 +286,7 @@ internal fun MainTabsScaffold(
 @Composable
 private fun ModuleTabPage(
     xposedService: XposedService?,
-    bluetoothServiceResponsive: Boolean,
+    bluetoothServiceResponsive: ModuleHealth,
     bluetoothEnabled: Boolean,
     bondedDeviceCount: Int,
     onBluetoothStatusClick: () -> Unit,

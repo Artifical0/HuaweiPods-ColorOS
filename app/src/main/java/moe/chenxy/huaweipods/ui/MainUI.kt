@@ -45,6 +45,7 @@ import androidx.navigation3.runtime.rememberDecoratedNavEntries
 import androidx.navigation3.ui.NavDisplay
 import moe.chenxy.huaweipods.HuaweiPodsApp
 import moe.chenxy.huaweipods.R
+import moe.chenxy.huaweipods.coloros.applyColorOsLiveAlertSettings
 import moe.chenxy.huaweipods.config.AppLifecyclePrefs
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
@@ -178,7 +179,10 @@ internal fun MainUI(
     var pendingOpenEarphonesAfterPickerLoaded by remember { mutableStateOf(false) }
     var lastBluetoothServiceAliveMs by remember { mutableStateOf(0L) }
     var lastMiBluetoothServiceAliveMs by remember { mutableStateOf(0L) }
-    var bluetoothServiceResponsive by remember { mutableStateOf(false) }
+    var moduleCheckStarted by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
+    var lastObservedModuleMs by remember { mutableStateOf(0L) }
+    var observedModuleBuild by remember { mutableStateOf<String?>(null) }
+    var bluetoothServiceResponsive by remember { mutableStateOf(ModuleHealth.CHECKING) }
     val backgroundColor = appBackground()
     val overlayBottomBar = floatingBottomBar.value || blurBottomBar.value
     val pageBottomContentPadding = if (overlayBottomBar) 104.dp else 28.dp
@@ -609,12 +613,19 @@ internal fun MainUI(
                     }
 
                     HuaweiPodsAction.ACTION_MODULE_BLUETOOTH_SERVICE_ALIVE -> {
+                        val build = intent.getStringExtra(HuaweiPodsAction.EXTRA_MODULE_BUILD_ID)
+                        if (!build.isNullOrBlank()) {
+                            lastObservedModuleMs = SystemClock.elapsedRealtime()
+                            observedModuleBuild = build
+                            bluetoothServiceResponsive = moduleHealth(lastObservedModuleMs,
+                                moduleCheckStarted, lastObservedModuleMs, build, BuildConfig.MODULE_BUILD_ID)
+                        }
                         if (
                             intent.getStringExtra(HuaweiPodsAction.EXTRA_MODULE_BUILD_ID) ==
                             BuildConfig.MODULE_BUILD_ID
                         ) {
                             lastBluetoothServiceAliveMs = SystemClock.elapsedRealtime()
-                            bluetoothServiceResponsive = true
+                            bluetoothServiceResponsive = ModuleHealth.ONLINE
                         }
                     }
 
@@ -700,10 +711,10 @@ internal fun MainUI(
         }
     }
 
-    LaunchedEffect(lastBluetoothServiceAliveMs) {
+    LaunchedEffect(lastObservedModuleMs, moduleCheckStarted) {
         while (true) {
-            bluetoothServiceResponsive = lastBluetoothServiceAliveMs > 0L &&
-                    SystemClock.elapsedRealtime() - lastBluetoothServiceAliveMs <= 75_000L
+            bluetoothServiceResponsive = moduleHealth(SystemClock.elapsedRealtime(),
+                moduleCheckStarted, lastObservedModuleMs, observedModuleBuild, BuildConfig.MODULE_BUILD_ID)
             delay(5_000L)
         }
     }
@@ -912,7 +923,10 @@ internal fun MainUI(
 
                 if (commandSucceeded && waitForBluetooth) {
                     lastBluetoothServiceAliveMs = 0L
-                    bluetoothServiceResponsive = false
+                    moduleCheckStarted = SystemClock.elapsedRealtime()
+                    lastObservedModuleMs = 0L
+                    observedModuleBuild = null
+                    bluetoothServiceResponsive = ModuleHealth.CHECKING
                 }
 
                 if (commandSucceeded && waitForBluetooth) {
@@ -1164,12 +1178,14 @@ internal fun MainUI(
                         onPersistentNotificationEnabledChange = {
                             persistentNotificationEnabled.value = it
                             ConfigManager.updatePersistentNotificationEnabled(prefs, xposedService, it)
+                            applyColorOsLiveAlertSettings(context, ConfigManager.current())
                             broadcastConfigChanged(context, "com.android.bluetooth")
                         },
                         lockscreenNotificationEnabled = lockscreenNotificationEnabled,
                         onLockscreenNotificationEnabledChange = {
                             lockscreenNotificationEnabled.value = it
                             ConfigManager.updateLockscreenNotificationEnabled(prefs, xposedService, it)
+                            applyColorOsLiveAlertSettings(context, ConfigManager.current())
                             broadcastConfigChanged(context, "com.android.bluetooth")
                         },
                         lowBatteryReminderEnabled = lowBatteryReminderEnabled,

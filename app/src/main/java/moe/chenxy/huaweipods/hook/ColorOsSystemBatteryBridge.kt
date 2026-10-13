@@ -158,8 +158,23 @@ internal object ColorOsSystemBatteryBridge {
     }
 
     private class RemoteDevice(val instance: Any, val type: Class<*>, val transportHfpAt: Int) {
-        fun call(name: String, parameterTypes: Array<Class<*>>, vararg args: Any?): Any? =
-            type.getMethod(name, *parameterTypes).invoke(instance, *args)
+        private val methods = OptionalVendorMethods(type)
+        private val reported = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+        fun call(name: String, parameterTypes: Array<Class<*>>, vararg args: Any?) {
+            // ColorOS 16 does not expose all of ColorOS 17's battery extensions. A missing
+            // transport/wear method must not prevent the battery or Android fallback update.
+            runCatching {
+                val method = methods.find(name, parameterTypes)
+                if (method == null) {
+                    if (reported.add(name)) Log.i(TAG, "ColorOS optional battery method unavailable: $name")
+                } else {
+                    method.invoke(instance, *args)
+                }
+            }.onFailure {
+                if (reported.add("failed:$name")) Log.w(TAG, "ColorOS battery method failed: $name", it)
+            }
+        }
     }
 
     private fun oplusRemoteDevice(context: Context): RemoteDevice? {

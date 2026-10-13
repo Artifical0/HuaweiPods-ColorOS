@@ -1,5 +1,7 @@
 package moe.chenxy.huaweipods.pods
 
+import moe.chenxy.huaweipods.broadcast.sendHeadsetAppBroadcast
+
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
@@ -451,6 +453,9 @@ object HuaweiHfpController {
         }
     }
 
+    internal fun audioSessionAddress(): String? = synchronized(sessionStateLock) { device?.address }
+    internal fun audioSessionGeneration(): Long = synchronized(sessionStateLock) { sessionGeneration }
+
     fun disconnectedPod(context: Context, device: BluetoothDevice) {
         synchronized(sessionStateLock) {
             if (this.device?.address != device.address) return
@@ -521,6 +526,13 @@ object HuaweiHfpController {
             return null
         }
         return synchronized(sessionStateLock) {
+            // A late AT response from a closed/previous device must not recreate or replace
+            // the session; connection ownership is established by the fresh Profile check.
+            if (!this.device?.address.equals(device.address, ignoreCase = true)) {
+                // Still consume the recognized AT command; do not let the stock stack send
+                // an unsupported-command error just because session ownership changed.
+                return@synchronized result.battery.normalizedEarbudAvailability()
+            }
             ensureSession(context, device, route)
             val battery = result.battery.normalizedEarbudAvailability()
             currentBattery = battery
@@ -2453,7 +2465,7 @@ object HuaweiHfpController {
             fill()
             setPackage(BuildConfig.APPLICATION_ID)
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            ctx.sendIdentitySharingBroadcast(this)
+            ctx.sendHeadsetAppBroadcast(this)
         }
     }
 
@@ -2476,7 +2488,7 @@ object HuaweiHfpController {
                 fill()
                 setPackage(targetPackage)
                 addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                ctx.sendBroadcast(this)
+                ctx.sendIdentitySharingBroadcast(this)
             }
         }
     }

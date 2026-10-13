@@ -159,6 +159,82 @@ class HuaweiPodsBroadcastTrustPolicyTest {
     }
 
     @Test
+    fun `My Devices accepts only confirmed Bluetooth status actions`() {
+        val actions = listOf(
+            HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED,
+            HuaweiPodsAction.ACTION_PODS_ANC_CHANGED,
+            HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED,
+            HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_CHANGED,
+        )
+        actions.forEach { action ->
+            assertEquals(
+                BroadcastActionDomain.BLUETOOTH_STATE,
+                HuaweiPodsBroadcastTrustPolicy.resolveDomain(action),
+            )
+            assertTrue(
+                "My Devices must accept Bluetooth status $action",
+                HuaweiPodsBroadcastTrustPolicy.shouldAcceptMyDevicesStateBroadcast(
+                    action,
+                    HuaweiPodsBroadcastTrustPolicy.PACKAGE_BLUETOOTH,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `My Devices rejects state with missing identity or non Bluetooth sender`() {
+        val actions = listOf(
+            HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED,
+            HuaweiPodsAction.ACTION_PODS_ANC_CHANGED,
+            HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED,
+            HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_CHANGED,
+        )
+        val senders = listOf(
+            null,
+            "",
+            "com.fake.bluetooth",
+            HuaweiPodsBroadcastTrustPolicy.PACKAGE_APP,
+            HuaweiPodsBroadcastTrustPolicy.PACKAGE_HEYTAP_MYDEVICES,
+            HuaweiPodsBroadcastTrustPolicy.PACKAGE_HEYTAP_ACCESSORY,
+            HuaweiPodsBroadcastTrustPolicy.PACKAGE_SMART_AUDIO,
+        )
+        actions.forEach { action ->
+            senders.forEach { sender ->
+                assertFalse(
+                    "My Devices must reject status $action from $sender",
+                    HuaweiPodsBroadcastTrustPolicy.shouldAcceptMyDevicesStateBroadcast(action, sender),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `My Devices rejects control system and unregistered state actions even from Bluetooth`() {
+        val actions = listOf(
+            null,
+            "",
+            "chen.action.huaweipods.coloros.unknown_custom_action",
+            "android.bluetooth.adapter.action.STATE_CHANGED",
+            HuaweiPodsAction.ACTION_REFRESH_STATUS,
+            HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET,
+            HuaweiPodsAction.ACTION_CONFIG_CHANGED,
+            HuaweiPodsAction.ACTION_PODS_CONNECTED,
+            HuaweiPodsAction.ACTION_PODS_DISCONNECTED,
+            HuaweiPodsAction.ACTION_PODS_CONNECTION_STATE_CHANGED,
+            HuaweiPodsAction.ACTION_MODULE_BLUETOOTH_SERVICE_ALIVE,
+        )
+        actions.forEach { action ->
+            assertFalse(
+                "My Devices must reject action $action outside its receiver contract",
+                HuaweiPodsBroadcastTrustPolicy.shouldAcceptMyDevicesStateBroadcast(
+                    action,
+                    HuaweiPodsBroadcastTrustPolicy.PACKAGE_BLUETOOTH,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `unknown action is strictly rejected fail-closed`() {
         val unknownActions = listOf(
             "chen.action.huaweipods.coloros.unknown_custom_action",

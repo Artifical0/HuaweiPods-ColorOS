@@ -3,6 +3,9 @@ package moe.chenxy.huaweipods.hook
 import android.annotation.SuppressLint
 import android.app.StatusBarManager
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothA2dp
+import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
@@ -32,6 +35,7 @@ import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
+import moe.chenxy.huaweipods.coloros.queryColorOsLiveAlertAudioProfiles
 
 object HeadsetStateDispatcher : HookContext() {
     private const val ROUTE_PROBE_WATCHDOG_MS = 5_500L
@@ -51,6 +55,7 @@ object HeadsetStateDispatcher : HookContext() {
     private var statusBarIconUnavailable = false
     private val connectedA2dpAddresses = ConcurrentHashMap.newKeySet<String>()
     private val connectedHuaweiA2dpAddresses = ConcurrentHashMap.newKeySet<String>()
+    private val audioProbes = AudioSessionProbeGuard()
     private val activeRouteProbe = AtomicReference<HuaweiDeviceRouteProbeSession?>(null)
     private val lastRouteProbeStartedAtMs = ConcurrentHashMap<String, Long>()
     @Volatile
@@ -117,19 +122,7 @@ object HeadsetStateDispatcher : HookContext() {
                     registerAppRequestReceiver(context)
                     if (!isHuawei) return@runCatching
 
-                    if (currState == BluetoothHeadset.STATE_CONNECTED) {
-                        connectedHuaweiA2dpAddresses.add(normalizedAddress)
-                        setHeadsetIcon(context, visible = true, reason = "connected")
-                        startIconWatchdog(context)
-                        HuaweiHfpController.connectPod(context, device)
-                    } else if (currState == BluetoothHeadset.STATE_DISCONNECTING || currState == BluetoothHeadset.STATE_DISCONNECTED) {
-                        connectedHuaweiA2dpAddresses.remove(normalizedAddress)
-                        if (connectedHuaweiA2dpAddresses.isEmpty()) {
-                            stopIconWatchdog()
-                            setHeadsetIcon(context, visible = false, reason = "disconnected")
-                        }
-                        HuaweiHfpController.disconnectedPod(context, device)
-                    }
+                    postTracked(mainHandler) { checkAudioSession(context, device, BluetoothProfile.A2DP, currState) }
                 }.onFailure {
                     Log.e("HuaweiPods", "A2DP state callback failed without interrupting Bluetooth", it)
                 }
@@ -139,6 +132,7 @@ object HeadsetStateDispatcher : HookContext() {
 
     override fun onCanClose(): Boolean =
         activeRouteProbe.get() == null &&
+        moe.chenxy.huaweipods.broadcast.HeadsetLifecycleBinding.canCloseForHotReload() &&
         HuaweiL2capAncController.canCloseForHotReload() &&
             OfficialImageIdentityBridge.canCloseForHotReload()
 
@@ -163,30 +157,21 @@ object HeadsetStateDispatcher : HookContext() {
                 isHuaweiPod(device) && isActiveA2dpDevice(device)
             }.mapTo(restoredAddresses) { it.address.uppercase() }
         }
-        val connectedDevices = restoredAddresses.mapNotNull { address ->
-            runCatching { adapter.getRemoteDevice(address) }.getOrNull()
-                ?.takeIf { isHuaweiPod(it) && isDeviceConnected(it) }
-                ?.also { connectedA2dpAddresses += address }
-        }
-        connectedHuaweiA2dpAddresses.addAll(connectedDevices.map { it.address.uppercase() })
-        if (connectedHuaweiA2dpAddresses.isNotEmpty()) {
-            setHeadsetIcon(context, visible = true, reason = "hot-reload-restore")
-            startIconWatchdog(context)
-        }
         // Controller 只维护一个 HFP 会话。优先恢复旧代实际持有的设备，避免多设备
         // 遍历时后一个地址覆盖已恢复的电量并使通知恢复任务失效。
         val savedAddress = HuaweiHfpController.hotReloadSessionAddress(savedState)
-        val sessionDevice = connectedDevices.firstOrNull {
-            it.address.equals(savedAddress, ignoreCase = true)
-        } ?: connectedDevices.firstOrNull()
-        sessionDevice?.let { device ->
-            HuaweiHfpController.connectPod(context, device)
-            HuaweiHfpController.restoreHotReloadState(savedState)
+        if (!savedAddress.isNullOrBlank()) restoredAddresses.add(savedAddress.uppercase())
+        val candidates = if (!savedAddress.isNullOrBlank()) listOf(savedAddress) else restoredAddresses.toList()
+        candidates.forEach { address ->
+            runCatching { adapter.getRemoteDevice(address) }.getOrNull()?.let { device ->
+                checkAudioSession(context, device, null, null, restore = true, savedState = savedState)
+            }
         }
     }
 
     override fun onClose() {
         acceptingCallbacks = false
+        audioProbes.reset()
         stopIconWatchdog()
         pendingHostCallbacks.entries.toList().forEach { (task, handler) ->
             handler.removeCallbacks(task)
@@ -212,11 +197,12 @@ object HeadsetStateDispatcher : HookContext() {
         activeRouteProbe.set(null)
         lastRouteProbeStartedAtMs.clear()
         HuaweiHfpController.closeForHotReload()
+        val liveAlertStopped = moe.chenxy.huaweipods.broadcast.HeadsetLifecycleBinding.closeForHotReload()
         val rfcommStopped = HuaweiL2capAncController.closeForHotReload()
         HuaweiWearDetectionController.closeForHotReload()
         val imageBridgeStopped = OfficialImageIdentityBridge.closeForHotReload()
-        check(rfcommStopped && imageBridgeStopped) {
-            "Bluetooth hot-reload workers did not stop rfcomm=$rfcommStopped image=$imageBridgeStopped"
+        check(rfcommStopped && imageBridgeStopped && liveAlertStopped) {
+            "Bluetooth hot-reload workers did not stop rfcomm=$rfcommStopped image=$imageBridgeStopped liveAlert=$liveAlertStopped"
         }
     }
 
@@ -257,7 +243,7 @@ object HeadsetStateDispatcher : HookContext() {
             statusBarManager.setIconVisibility("wireless_headset", visible)
             Log.d("HuaweiPods", "status bar headset icon visible=$visible reason=$reason")
         }.onFailure {
-            if (it is SecurityException) {
+            if (isVendorPermissionDenied(it)) {
                 statusBarIconUnavailable = true
                 stopIconWatchdog()
                 Log.d("HuaweiPods", "status bar headset icon not permitted; system icon kept")
@@ -304,25 +290,68 @@ object HeadsetStateDispatcher : HookContext() {
                 Log.w("HuaweiPods", "A2DP connected-device restore query failed", it)
             }.getOrDefault(emptyList())
         }.orEmpty()
-        val candidates = if (connectedDevices.isNotEmpty()) {
-            connectedDevices
-        } else {
-            val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
-            runCatching { adapter.bondedDevices.orEmpty().filter(::isDeviceConnected) }
-                .onFailure { Log.w("HuaweiPods", "Bonded-device restore fallback failed", it) }
-                .getOrDefault(emptyList())
-        }
+        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
+        val candidates = (connectedDevices + runCatching { adapter.bondedDevices.orEmpty().toList() }
+            .getOrDefault(emptyList())).distinctBy { it.address }
         candidates
             .filter(::isHuaweiPod)
             .forEach { device ->
-                val address = device.address.uppercase()
-                if (!connectedA2dpAddresses.add(address)) return@forEach
-                connectedHuaweiA2dpAddresses.add(address)
-                setHeadsetIcon(context, visible = true, reason = "restore")
-                startIconWatchdog(context)
-                HuaweiHfpController.connectPod(context, device)
-                Log.i("HuaweiPods", "Restored connected Huawei device after Bluetooth restart")
+                checkAudioSession(context, device, null, null, restore = true)
             }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun checkAudioSession(context: Context, device: BluetoothDevice, profile: Int?, state: Int?,
+                                  restore: Boolean = false, savedState: Bundle? = null) {
+        if (!acceptingCallbacks || !isHuaweiPod(device)) return
+        val address = device.address
+        val token = audioProbes.begin(address)
+        val sessionGeneration = HuaweiHfpController.audioSessionGeneration()
+        queryColorOsLiveAlertAudioProfiles(context, address) { a2dp, hfp ->
+            runCatching {
+            if (!acceptingCallbacks || !audioProbes.accepts(token) ||
+                HuaweiHfpController.audioSessionGeneration() != sessionGeneration) return@queryColorOsLiveAlertAudioProfiles
+            val adapterEnabled = runCatching { context.getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled }
+                .getOrNull()
+            if (adapterEnabled == false) { endAudioSession(context); return@queryColorOsLiveAlertAudioProfiles }
+            val decision = HeadsetAudioSessionPolicy.decide(HuaweiHfpController.audioSessionAddress(), address,
+                profile, state, a2dp, hfp, restore)
+            if (a2dp == BluetoothProfile.STATE_CONNECTED) connectedA2dpAddresses.add(address.uppercase())
+            else if (a2dp == BluetoothProfile.STATE_DISCONNECTED) connectedA2dpAddresses.remove(address.uppercase())
+            when (decision) {
+                AudioSessionDecision.CONNECT, AudioSessionDecision.KEEP -> {
+                    if (a2dp == BluetoothProfile.STATE_CONNECTED || hfp == BluetoothProfile.STATE_CONNECTED) {
+                        connectedHuaweiA2dpAddresses.add(address.uppercase())
+                        setHeadsetIcon(context, true, "audio-profile")
+                        startIconWatchdog(context)
+                        if (decision == AudioSessionDecision.CONNECT) {
+                            HuaweiHfpController.connectPod(context, device)
+                            savedState?.let(HuaweiHfpController::restoreHotReloadState)
+                        }
+                    }
+                }
+                AudioSessionDecision.DISCONNECT -> {
+                    connectedHuaweiA2dpAddresses.remove(address.uppercase())
+                    HuaweiHfpController.disconnectedPod(context, device)
+                    if (connectedHuaweiA2dpAddresses.isEmpty()) { stopIconWatchdog(); setHeadsetIcon(context, false, "audio-disconnected") }
+                }
+                AudioSessionDecision.IGNORE -> Unit
+            }
+            }.onFailure { Log.w("HuaweiPods", "Audio Profile session update failed without interrupting Bluetooth", it) }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun endAudioSession(context: Context) {
+        audioProbes.reset()
+        HuaweiHfpController.audioSessionAddress()?.let { address ->
+            runCatching { context.getSystemService(BluetoothManager::class.java)?.adapter?.getRemoteDevice(address) }
+                .getOrNull()?.let { HuaweiHfpController.disconnectedPod(context, it) }
+        }
+        connectedA2dpAddresses.clear()
+        connectedHuaweiA2dpAddresses.clear()
+        stopIconWatchdog()
+        setHeadsetIcon(context, false, "bluetooth-off")
     }
 
     @SuppressLint("MissingPermission")
@@ -332,6 +361,22 @@ object HeadsetStateDispatcher : HookContext() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     if (context == null) return
                     val receivedIntent = intent ?: return
+                    if (receivedIntent.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                        if (receivedIntent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) in
+                            listOf(BluetoothAdapter.STATE_TURNING_OFF, BluetoothAdapter.STATE_OFF)) runCatching { endAudioSession(context) }
+                                .onFailure { Log.w("HuaweiPods", "Bluetooth-off cleanup failed", it) }
+                        return
+                    }
+                    if (receivedIntent.action in listOf(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
+                            BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)) {
+                        val target = receivedIntent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java) ?: return
+                        val profile = if (receivedIntent.action == BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+                            BluetoothProfile.A2DP else BluetoothProfile.HEADSET
+                        runCatching { checkAudioSession(context, target, profile,
+                            receivedIntent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1)) }
+                            .onFailure { Log.w("HuaweiPods", "Audio Profile event failed", it) }
+                        return
+                    }
                     runCatching {
                         val action = HuaweiPodsAction.canonical(receivedIntent.action)
                         if (!HuaweiPodsBroadcastTrustPolicy.isTrustedAppControlSender(sentFromPackage)) {
@@ -382,6 +427,9 @@ object HeadsetStateDispatcher : HookContext() {
             }
         val registered = runCatching {
             context.registerReceiver(receiver, IntentFilter().apply {
+                addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+                addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_UI_INIT)
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_REFRESH_STATUS)
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONNECT_POD_REQUEST)
@@ -524,7 +572,7 @@ object HeadsetStateDispatcher : HookContext() {
             "HuaweiPods",
             "rejected device $operation request reason=$reason device=$deviceName/${device.address}",
         )
-        context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_PODS_CONNECTION_STATE_CHANGED).apply {
+        context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_PODS_CONNECTION_STATE_CHANGED).apply {
             putExtra("address", device.address)
             putExtra("device_name", deviceName)
             putExtra("state", state)

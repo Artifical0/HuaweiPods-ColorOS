@@ -26,6 +26,7 @@ import java.util.Locale
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 import moe.chenxy.huaweipods.BuildConfig
+import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.HuaweiWearDetectionController
 import moe.chenxy.huaweipods.pods.NoiseControlMode
@@ -306,6 +307,13 @@ object ColorOsMyDevicesHook : HookContext() {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val received = intent ?: return
+                if (!HuaweiPodsBroadcastTrustPolicy.shouldAcceptMyDevicesStateBroadcast(
+                        received.action, sentFromPackage,
+                    )
+                ) {
+                    Log.w(TAG, "Rejected My Devices state action=${received.action} sender=$sentFromPackage")
+                    return
+                }
                 val action = HuaweiPodsAction.canonical(received.action)
                 if (action == HuaweiPodsAction.ACTION_PODS_ANC_CHANGED) {
                     val address = received.getStringExtra("address")?.uppercase() ?: return

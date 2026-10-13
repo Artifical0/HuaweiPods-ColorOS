@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import moe.chenxy.huaweipods.config.ConfigManager
 
 /** Keeps the app process alive only while a connected-headset Fluid Cloud is active. */
 class ColorOsLiveAlertService : Service() {
@@ -26,10 +27,10 @@ class ColorOsLiveAlertService : Service() {
     private var disconnectedChecks = 0
     private val bluetoothStateCheck = object : Runnable {
         override fun run() {
-            val bluetoothEnabled = runCatching {
-                getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
-            }.getOrDefault(true)
-            if (!bluetoothEnabled) {
+            val bluetoothDisabled = runCatching {
+                getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == false
+            }.getOrDefault(false)
+            if (bluetoothDisabled) {
                 stopLiveAlert()
                 return
             }
@@ -69,12 +70,14 @@ class ColorOsLiveAlertService : Service() {
     /** 两个音频 Profile 均已就绪且都不再连接当前耳机时才判定断开；状态未知时保持显示。 */
     private fun isCurrentDeviceDisconnected(): Boolean {
         val address = currentAddress ?: return false
-        if (profileProxies.size < 2) return false
         return runCatching {
             val device = getSystemService(BluetoothManager::class.java).adapter.getRemoteDevice(address)
-            profileProxies.values.all { proxy ->
-                proxy.getConnectionState(device) == BluetoothProfile.STATE_DISCONNECTED
-            }
+            ColorOsLiveAlertConnectionPolicy.shouldCancelAfterProfileCheck(
+                currentAddress = currentAddress,
+                checkedAddress = address,
+                a2dpState = profileProxies[BluetoothProfile.A2DP]?.getConnectionState(device),
+                headsetState = profileProxies[BluetoothProfile.HEADSET]?.getConnectionState(device),
+            )
         }.getOrDefault(false)
     }
     private val bluetoothReceiver = object : BroadcastReceiver() {
@@ -82,25 +85,25 @@ class ColorOsLiveAlertService : Service() {
             val event = intent ?: return
             val shouldStop = when (event.action) {
                 BluetoothAdapter.ACTION_STATE_CHANGED ->
-                    event.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) in setOf(
-                        BluetoothAdapter.STATE_TURNING_OFF,
-                        BluetoothAdapter.STATE_OFF,
+                    ColorOsLiveAlertConnectionPolicy.isBluetoothTurningOffOrOff(
+                        event.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR),
                     )
 
                 BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
                 BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> {
-                    val disconnected = event.getIntExtra(
+                    val state = event.getIntExtra(
                         BluetoothProfile.EXTRA_STATE,
-                        BluetoothProfile.STATE_DISCONNECTED,
-                    ) == BluetoothProfile.STATE_DISCONNECTED
+                        BluetoothAdapter.ERROR,
+                    )
                     val address = runCatching {
                         event.getParcelableExtra(
                             BluetoothDevice.EXTRA_DEVICE,
                             BluetoothDevice::class.java,
                         )?.address
                     }.getOrNull()
-                    disconnected && !address.isNullOrBlank() &&
-                        address.equals(currentAddress, ignoreCase = true)
+                    ColorOsLiveAlertConnectionPolicy.shouldCheckProfileDisconnect(
+                        currentAddress, address, state,
+                    ) && isCurrentDeviceDisconnected()
                 }
 
                 else -> false
@@ -127,9 +130,21 @@ class ColorOsLiveAlertService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        currentAddress = intent?.getStringExtra(EXTRA_DEVICE_ADDRESS)
+        val config = ConfigManager.refreshFromPrefs(
+            getSharedPreferences(ConfigManager.PREFS_NAME, MODE_PRIVATE),
+        )
+        if (!config.persistentNotificationEnabled) {
+            // A battery update may have queued this start before the settings switch was turned off.
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        val nextAddress = intent?.getStringExtra(EXTRA_DEVICE_ADDRESS)
             ?.takeIf(String::isNotBlank)
             ?: currentAddress
+        if (!nextAddress.equals(currentAddress, ignoreCase = true)) disconnectedChecks = 0
+        currentAddress = nextAddress
         val notification = intent?.getParcelableExtra(
             EXTRA_NOTIFICATION,
             Notification::class.java,
@@ -137,6 +152,7 @@ class ColorOsLiveAlertService : Service() {
             stopSelf(startId)
             return START_NOT_STICKY
         }
+        notification.visibility = colorOsLiveAlertVisibility(config.lockscreenNotificationEnabled)
         try {
             startForeground(NOTIFICATION_ID, notification)
         } catch (_: SecurityException) {
@@ -156,6 +172,7 @@ class ColorOsLiveAlertService : Service() {
         profileProxies.forEach { (type, proxy) -> runCatching { adapter?.closeProfileProxy(type, proxy) } }
         profileProxies.clear()
         stopForeground(STOP_FOREGROUND_REMOVE)
+        ColorOsLiveAlertBridgeService.reportClosed()
         super.onDestroy()
     }
 

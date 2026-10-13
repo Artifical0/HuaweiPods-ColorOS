@@ -1,8 +1,6 @@
 package moe.chenxy.huaweipods
 
 import android.app.Application
-import android.content.Context
-import android.content.IntentFilter
 import android.util.Log
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
@@ -11,25 +9,12 @@ import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 import moe.chenxy.huaweipods.config.LowLatencyPrefs
 import moe.chenxy.huaweipods.config.PodImagePrefs
-import moe.chenxy.huaweipods.coloros.ColorOsLiveAlertReceiver
 import moe.chenxy.huaweipods.smartaudio.SmartAudioImageCache
-import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
-import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsActions
 
 class HuaweiPodsApp : Application(), XposedServiceHelper.OnServiceListener {
     override fun onCreate() {
         super.onCreate()
         XposedServiceHelper.registerListener(this)
-        registerReceiver(
-            ColorOsLiveAlertReceiver(),
-            IntentFilter().addHuaweiPodsActions(
-                HuaweiPodsAction.ACTION_PODS_CONNECTED,
-                HuaweiPodsAction.ACTION_PODS_DISCONNECTED,
-                HuaweiPodsAction.ACTION_PODS_CONNECTION_STATE_CHANGED,
-                HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED,
-            ),
-            Context.RECEIVER_EXPORTED,
-        )
         runCatching { SmartAudioImageCache.resumePending(this) }
             .onFailure { Log.w(TAG, "Unable to resume official image jobs", it) }
     }

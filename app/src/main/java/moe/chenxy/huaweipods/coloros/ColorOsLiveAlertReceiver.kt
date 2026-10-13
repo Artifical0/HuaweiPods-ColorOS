@@ -18,6 +18,7 @@ import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import moe.chenxy.huaweipods.MainActivity
 import moe.chenxy.huaweipods.R
@@ -57,6 +58,8 @@ internal fun shouldAcceptColorOsLiveAlertBatteryUpdate(
 internal fun markColorOsLiveAlertDisconnected(context: Context, elapsedRealtime: Long) {
     context.getSharedPreferences("coloros_live_alert_state", Context.MODE_PRIVATE).edit()
         .putLong("last_disconnect_elapsed", elapsedRealtime)
+        .putLong("last_event_elapsed", elapsedRealtime)
+        .putInt("event_boot", runCatching { Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT) }.getOrDefault(-1))
         .remove("current_address")
         .apply()
 }
@@ -72,7 +75,12 @@ internal fun NotificationCompat.Builder.requestColorOsLiveAlert(chipText: String
 
 /** Publishes the Android 16 promoted ongoing notification rendered as ColorOS Fluid Cloud. */
 class ColorOsLiveAlertReceiver : BroadcastReceiver() {
+    internal var fromBoundBridge = false
+
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action !in TRUSTED_BLUETOOTH_ACTIONS && intent.action !in setOf(
+                BluetoothAdapter.ACTION_STATE_CHANGED, BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
+                BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)) return
         if (
             intent.action in TRUSTED_BLUETOOTH_ACTIONS &&
             !HuaweiPodsBroadcastTrustPolicy.isTrustedBluetoothStateSender(sentFromPackage)
@@ -80,6 +88,14 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             Log.w(TAG, "Rejected headset status broadcast from an untrusted sender: $sentFromPackage")
             return
         }
+        handleTrustedEvent(context, intent)
+    }
+
+    /** Only called after the receiver or Binder has authenticated the real Bluetooth sender. */
+    internal fun handleTrustedEvent(context: Context, intent: Intent, onComplete: ((Boolean) -> Unit)? = null) {
+        var completionPending = false
+        var succeeded = true
+        try {
         val isColorOs = RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND) ==
             RomFamily.COLOR_OS
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -93,19 +109,23 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             HuaweiPodsAction.EXTRA_EVENT_ELAPSED_REALTIME,
             0L,
         )
-        val platformDisconnect = when (intent.action) {
-            BluetoothAdapter.ACTION_STATE_CHANGED ->
-                intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) in setOf(
-                    BluetoothAdapter.STATE_TURNING_OFF,
-                    BluetoothAdapter.STATE_OFF,
-                )
-
+        when (intent.action) {
+            BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                if (ColorOsLiveAlertConnectionPolicy.isBluetoothTurningOffOrOff(
+                        intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR),
+                    )
+                ) {
+                    cancelLiveAlert(context, manager, statePrefs, eventElapsed)
+                    Log.d(TAG, "ColorOS Live Alert cancelled on Bluetooth shutdown")
+                }
+                return
+            }
             BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
             BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> {
-                val disconnected = intent.getIntExtra(
+                val state = intent.getIntExtra(
                     BluetoothProfile.EXTRA_STATE,
-                    BluetoothProfile.STATE_DISCONNECTED,
-                ) == BluetoothProfile.STATE_DISCONNECTED
+                    BluetoothAdapter.ERROR,
+                )
                 val eventAddress = runCatching {
                     intent.getParcelableExtra(
                         BluetoothDevice.EXTRA_DEVICE,
@@ -113,17 +133,21 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
                     )?.address
                 }.getOrNull()
                 val currentAddress = statePrefs.getString(KEY_CURRENT_ADDRESS, null)
-                disconnected && !eventAddress.isNullOrBlank() &&
-                    eventAddress.equals(currentAddress, ignoreCase = true)
+                if (ColorOsLiveAlertConnectionPolicy.shouldCheckProfileDisconnect(
+                        currentAddress, eventAddress, state,
+                    )
+                ) completionPending = confirmDisconnected(context, manager, statePrefs, eventAddress, eventElapsed, onComplete)
+                return
             }
-
-            else -> false
         }
-        if (platformDisconnect) {
-            cancelLiveAlert(context, manager, statePrefs, eventElapsed)
-            Log.d(TAG, "ColorOS Live Alert cancelled on Bluetooth disconnect")
-            return
+        val boot = runCatching { Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT) }.getOrNull()
+        val previousBoot = statePrefs.getInt("event_boot", -1).takeIf { it >= 0 }
+        if (boot != null && previousBoot != null && boot != previousBoot) {
+            statePrefs.edit().putLong(KEY_LAST_DISCONNECT_ELAPSED, 0L).remove(KEY_CURRENT_ADDRESS).apply()
         }
+        if (!acceptColorOsLiveAlertEvent(previousBoot, boot, statePrefs.getLong("last_event_elapsed", 0L), eventElapsed)) return
+        if (eventElapsed > 0) statePrefs.edit().putLong("last_event_elapsed", eventElapsed)
+            .putInt("event_boot", boot ?: -1).apply()
         when (HuaweiPodsAction.canonical(intent.action)) {
             HuaweiPodsAction.ACTION_PODS_CONNECTED -> {
                 statePrefs.edit()
@@ -134,15 +158,14 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             }
 
             HuaweiPodsAction.ACTION_PODS_DISCONNECTED -> {
-                cancelLiveAlert(context, manager, statePrefs, eventElapsed)
-                Log.d(TAG, "ColorOS Live Alert cancelled on disconnect")
+                // The module also sends this when only A2DP ends. Verify HFP before clearing.
+                completionPending = confirmDisconnected(context, manager, statePrefs, intent.getStringExtra("address"), eventElapsed, onComplete)
                 return
             }
 
             HuaweiPodsAction.ACTION_PODS_CONNECTION_STATE_CHANGED -> {
                 if (intent.getStringExtra("state") == "disconnected") {
-                    cancelLiveAlert(context, manager, statePrefs, eventElapsed)
-                    Log.d(TAG, "ColorOS Live Alert cancelled on connection-state change")
+                    completionPending = confirmDisconnected(context, manager, statePrefs, intent.getStringExtra("address"), eventElapsed, onComplete)
                 } else if (intent.getStringExtra("state") == "connected") {
                     statePrefs.edit()
                         .putLong(KEY_LAST_DISCONNECT_ELAPSED, 0L)
@@ -253,7 +276,7 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setVisibility(colorOsLiveAlertVisibility(ConfigManager.lockscreenNotificationEnabled()))
             .apply { largeIcon?.let(::setLargeIcon) }
             .apply {
                 // 支持低时延的型号在卡片上提供一键切换；状态取模块记录的最近一次写入结果。
@@ -300,6 +323,12 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
                 Log.w(TAG, "Foreground keep-alive unavailable; posted notification directly", it)
             }
         Log.d(TAG, "ColorOS Live Alert posted")
+        } catch (error: Exception) {
+            succeeded = false
+            throw error
+        } finally {
+            if (!completionPending) onComplete?.invoke(succeeded)
+        }
     }
 
     private fun Intent.batteryParams(): BatteryParams {
@@ -317,6 +346,42 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             isConnected = getBooleanExtra("${prefix}_connected", false),
         )
 
+    private fun confirmDisconnected(
+        context: Context,
+        manager: NotificationManager,
+        statePrefs: android.content.SharedPreferences,
+        eventAddress: String?,
+        eventElapsed: Long,
+        onComplete: ((Boolean) -> Unit)? = null,
+    ): Boolean {
+        if (!ColorOsLiveAlertConnectionPolicy.matchesDevice(
+                statePrefs.getString(KEY_CURRENT_ADDRESS, null), eventAddress,
+            )
+        ) return false
+        val address = eventAddress ?: return false
+        val pendingResult = if (fromBoundBridge) null else goAsync()
+        queryColorOsLiveAlertAudioProfiles(context, address) { a2dpState, headsetState ->
+            var succeeded = true
+            try {
+                // A new headset may have become current while the Profile proxies were binding.
+                if (ColorOsLiveAlertConnectionPolicy.shouldCancelAfterProfileCheck(
+                        statePrefs.getString(KEY_CURRENT_ADDRESS, null), address, a2dpState, headsetState,
+                    )
+                ) {
+                    cancelLiveAlert(context, manager, statePrefs, eventElapsed)
+                    Log.d(TAG, "ColorOS Live Alert cancelled: both audio Profiles disconnected")
+                }
+            } catch (error: Exception) {
+                succeeded = false
+                Log.w(TAG, "Live Alert disconnect cleanup failed", error)
+            } finally {
+                pendingResult?.finish()
+                onComplete?.invoke(succeeded)
+            }
+        }
+        return true
+    }
+
     private fun cancelLiveAlert(
         context: Context,
         manager: NotificationManager,
@@ -332,6 +397,8 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             .apply()
         context.stopService(Intent(context, ColorOsLiveAlertService::class.java))
         manager.cancel(NOTIFICATION_ID)
+        markColorOsLiveAlertDisconnected(context, SystemClock.elapsedRealtime())
+        ColorOsLiveAlertBridgeService.reportClosed()
     }
 
     private companion object {
