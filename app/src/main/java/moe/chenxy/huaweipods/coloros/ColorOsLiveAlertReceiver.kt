@@ -9,6 +9,7 @@ import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothHeadset
+import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -359,6 +360,11 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
             )
         ) return false
         val address = eventAddress ?: return false
+        if (runCatching { context.getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == false }
+                .getOrDefault(false)) {
+            cancelLiveAlert(context, manager, statePrefs, eventElapsed)
+            return false
+        }
         val pendingResult = if (fromBoundBridge) null else goAsync()
         queryColorOsLiveAlertAudioProfiles(context, address) { a2dpState, headsetState ->
             var succeeded = true

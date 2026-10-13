@@ -214,9 +214,9 @@ object HuaweiHfpController {
     fun saveHotReloadState(outState: Bundle) {
         synchronized(sessionStateLock) {
             val currentDevice = device ?: return
-            val battery = currentBattery ?: return
             outState.putString(HOT_RELOAD_ADDRESS_KEY, currentDevice.address)
             outState.putString(HOT_RELOAD_ROUTE_KEY, sessionRoute.name)
+            val battery = currentBattery ?: return
             outState.putIntArray(HOT_RELOAD_BATTERY_KEY, encodeHotReloadBattery(battery))
         }
     }

@@ -137,6 +137,7 @@ object HeadsetStateDispatcher : HookContext() {
             OfficialImageIdentityBridge.canCloseForHotReload()
 
     override fun onSaveHotReloadState(outState: Bundle) {
+        moe.chenxy.huaweipods.broadcast.HeadsetLifecycleBinding.saveHotReloadState(outState)
         outState.putStringArrayList(
             "connected_a2dp_addresses",
             ArrayList(connectedA2dpAddresses),
@@ -147,6 +148,7 @@ object HeadsetStateDispatcher : HookContext() {
     @SuppressLint("MissingPermission")
     override fun onRestoreHotReloadState(savedState: Bundle) {
         val context = appRequestReceiverContext ?: currentApplicationOrNull() ?: return
+        moe.chenxy.huaweipods.broadcast.HeadsetLifecycleBinding.restoreHotReloadState(context, savedState)
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
         val restoredAddresses = savedState.getStringArrayList("connected_a2dp_addresses")
             .orEmpty()
@@ -313,6 +315,15 @@ object HeadsetStateDispatcher : HookContext() {
                 HuaweiHfpController.audioSessionGeneration() != sessionGeneration) return@queryColorOsLiveAlertAudioProfiles
             val adapterEnabled = runCatching { context.getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled }
                 .getOrNull()
+            if (savedState != null && moe.chenxy.huaweipods.broadcast.headsetRecoveryShouldClear(a2dp, hfp, adapterEnabled == false)) {
+                // A disconnect may race with the save/close boundary. Confirmed current
+                // states supersede the saved "connected" snapshot even without an owner.
+                moe.chenxy.huaweipods.broadcast.HeadsetLifecycleBinding.deliver(context,
+                    Intent(HuaweiPodsAction.ACTION_PODS_DISCONNECTED).apply {
+                        putExtra("address", address)
+                        putExtra(HuaweiPodsAction.EXTRA_EVENT_ELAPSED_REALTIME, SystemClock.elapsedRealtime())
+                    })
+            }
             if (adapterEnabled == false) { endAudioSession(context); return@queryColorOsLiveAlertAudioProfiles }
             val decision = HeadsetAudioSessionPolicy.decide(HuaweiHfpController.audioSessionAddress(), address,
                 profile, state, a2dp, hfp, restore)

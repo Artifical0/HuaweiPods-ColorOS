@@ -4,6 +4,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.pm.ApplicationInfo
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
+import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -17,6 +21,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.coloros.ColorOsLiveAlertBridgeService
+import moe.chenxy.huaweipods.coloros.queryColorOsLiveAlertAudioProfiles
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 
 internal fun shouldReleaseHeadsetBinding(lastSent: Long, acknowledged: Long): Boolean =
@@ -138,9 +143,13 @@ internal object HeadsetLifecycleBinding {
             override fun onNullBinding(name: ComponentName) { if (connection === this) failed() }
         }
         connection = target
-        val bound = runCatching { context.bindService(Intent().setComponent(ComponentName(
+        val bound = runCatching {
+            if (context.packageManager.getApplicationInfo(BuildConfig.APPLICATION_ID, 0).flags and
+                ApplicationInfo.FLAG_STOPPED != 0) return@runCatching false
+            context.bindService(Intent().setComponent(ComponentName(
             BuildConfig.APPLICATION_ID, "moe.chenxy.huaweipods.coloros.ColorOsLiveAlertBridgeService")),
-            target, Context.BIND_AUTO_CREATE) }.getOrDefault(false)
+            target, Context.BIND_AUTO_CREATE)
+        }.getOrDefault(false)
         if (bound) scheduleTimeout(generation, null, 5_000) else failed()
     }
 
@@ -153,7 +162,9 @@ internal object HeadsetLifecycleBinding {
 
     private fun failed() {
         if (closed || retryTask != null) return
+        val serviceDied = remote != null
         releaseTransport()
+        if (serviceDied && queue.size == 0) queue.replayLatestState()
         if (queue.size == 0) return
         val delay = retry.nextDelay() ?: return // Retain state, resume only on a fresh event.
         retryTask = Runnable { retryTask = null; pump() }.also { handler.postDelayed(it, delay) }
@@ -168,6 +179,37 @@ internal object HeadsetLifecycleBinding {
     }
 
     fun canCloseForHotReload(): Boolean = !busy.get()
+
+    fun saveHotReloadState(state: Bundle) {
+        state.putParcelableArrayList("live_alert_pending_events", ArrayList(queue.recoverySnapshot().map { entry ->
+            // Primitive battery fields survive; old module Parcelables/loaders do not.
+            snapshotHeadsetLifecycleIntent(entry.payload)
+        }))
+    }
+
+    fun restoreHotReloadState(context: Context, state: Bundle) {
+        val events = state.getParcelableArrayList("live_alert_pending_events", Intent::class.java).orEmpty()
+            .filter { isHeadsetLifecycleAction(it.action) }.take(16)
+        events.groupBy { it.getStringExtra("address").orEmpty() }.forEach { (address, retained) ->
+            if (address.isBlank()) return@forEach
+            handler.post {
+                if (closed) return@post
+                queryColorOsLiveAlertAudioProfiles(context, address) { a2dp, hfp ->
+                    if (!closed) {
+                        val adapterOff = runCatching {
+                            context.getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == false
+                        }.getOrDefault(false)
+                        if (headsetRecoveryShouldClear(a2dp, hfp, adapterOff)) {
+                            deliver(context, Intent(HuaweiPodsAction.ACTION_PODS_DISCONNECTED).apply {
+                                putExtra("address", address)
+                                putExtra(HuaweiPodsAction.EXTRA_EVENT_ELAPSED_REALTIME, SystemClock.elapsedRealtime())
+                            })
+                        } else retained.forEach { deliver(context, it) }
+                    }
+                }
+            }
+        }
+    }
 
     fun closeForHotReload(): Boolean {
         closed = true

@@ -4,6 +4,65 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class HeadsetDeliveryQueueTest {
+    @Test fun recoverySnapshotNeverEvictsUnacknowledgedHeadForNewerCachedStates() {
+        val queue = HeadsetDeliveryQueue<String>(2)
+        queue.enqueue("critical", HeadsetEventKind.DISCONNECT, 1, "final disconnect")
+        val first = queue.protectHead()!!
+        repeat(50) { queue.enqueue("other-$it", HeadsetEventKind.BATTERY, (it + 2).toLong(), "battery") }
+        val saved = queue.recoverySnapshot()
+        assertEquals(2, saved.size)
+        assertEquals(first, saved.first())
+        assertEquals("final disconnect", saved.first().payload)
+    }
+    @Test fun appDeathReplaysAppliedConnectionWithoutWaitingForAnotherBatteryPacket() {
+        val queue = HeadsetDeliveryQueue<String>()
+        queue.enqueue("device", HeadsetEventKind.CONNECT, 10, "connected")
+        queue.enqueue("device", HeadsetEventKind.BATTERY, 20, "battery")
+        val first = queue.protectHead()!!; queue.acknowledge(first.id)
+        val second = queue.protectHead()!!; queue.acknowledge(second.id)
+        assertEquals(0, queue.size)
+        assertTrue(queue.replayLatestState())
+        assertEquals(2, queue.size)
+        assertTrue(queue.peek()!!.id > second.id)
+        assertEquals("connected", queue.peek()!!.payload)
+        assertFalse(queue.acknowledge(first.id))
+        assertFalse(queue.replayLatestState())
+    }
+    @Test fun disconnectedCurrentProfilesOverrideSavedConnectionDuringReload() {
+        assertTrue(headsetRecoveryShouldClear(0, 0, false))
+        assertFalse(headsetRecoveryShouldClear(2, 0, false))
+        assertFalse(headsetRecoveryShouldClear(0, 2, false))
+    }
+    @Test fun unknownProfilesNeverTurnSavedConnectionIntoFalseDisconnect() {
+        assertFalse(headsetRecoveryShouldClear(null, 0, false))
+        assertFalse(headsetRecoveryShouldClear(0, null, false))
+        assertFalse(headsetRecoveryShouldClear(null, null, false))
+    }
+    @Test fun bluetoothOffClearsReloadedNotificationWithoutProfileProxies() {
+        assertTrue(headsetRecoveryShouldClear(null, null, true))
+    }
+    @Test fun hotReloadTransfersUnacknowledgedDisconnectAndDropsOldReceiptIdentity() {
+        val old = HeadsetDeliveryQueue<String>()
+        old.enqueue("current", HeadsetEventKind.BATTERY, 10, "battery")
+        old.protectHead()
+        old.enqueue("current", HeadsetEventKind.DISCONNECT, 20, "disconnect")
+        val saved = old.snapshot()
+        old.clear()
+        assertEquals(2, saved.size)
+        val replacement = HeadsetDeliveryQueue<String>()
+        saved.forEach { replacement.enqueue(it.address, it.kind, it.elapsed, it.payload) }
+        assertEquals(HeadsetEventKind.DISCONNECT, replacement.peek()!!.kind)
+        assertEquals("disconnect", replacement.peek()!!.payload)
+        assertFalse(HeadsetDeliveryToken("new-generation", 1, 1).matches(HeadsetDeliveryToken("old-generation", 1, 1)))
+    }
+    @Test fun snapshotDoesNotKeepMutableQueueAndCanResumeAfterClose() {
+        val queue = HeadsetDeliveryQueue<String>()
+        queue.enqueue("device", HeadsetEventKind.CONNECT, 1, "connected")
+        val snapshot = queue.snapshot()
+        queue.enqueue("device", HeadsetEventKind.DISCONNECT, 2, "disconnected")
+        assertEquals("connected", snapshot.single().payload)
+        assertEquals("disconnected", queue.peek()!!.payload)
+    }
     private val address = "AA:BB:CC:DD:EE:01"
     @Test fun failedIpcRetainsProtectedDisconnectUntilAcknowledged() {
         val queue = HeadsetDeliveryQueue<String>()

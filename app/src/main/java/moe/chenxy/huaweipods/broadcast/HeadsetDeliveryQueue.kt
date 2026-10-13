@@ -10,10 +10,29 @@ internal class HeadsetDeliveryQueue<T>(private val capacity: Int = 16) {
     private val events = mutableListOf<HeadsetDelivery<T>>()
     private val latestTimes = linkedMapOf<String, Long>()
     private val disconnectedAt = linkedMapOf<String, Long>()
+    private val latestState = linkedMapOf<String, MutableMap<HeadsetEventKind, HeadsetDelivery<T>>>()
     private var nextId = 0L
     private var protectedId: Long? = null
-    val size get() = events.size
+    val size get() = synchronized(this) { events.size }
+    @Synchronized
+    fun snapshot(): List<HeadsetDelivery<T>> = events.toList()
+    @Synchronized
+    fun recoverySnapshot(): List<HeadsetDelivery<T>> {
+        val pendingIds = events.map { it.id }.toSet()
+        val stable = latestState.values.flatMap { it.values }.filter { it.id !in pendingIds }
+            .sortedBy { it.id }.takeLast(capacity - events.size)
+        return (events + stable).sortedBy { it.id }
+    }
+    @Synchronized
+    fun replayLatestState(): Boolean {
+        if (events.isNotEmpty()) return false
+        val saved = recoverySnapshot()
+        saved.forEach { events.add(it.copy(id = ++nextId)) }
+        return events.isNotEmpty()
+    }
+    @Synchronized
     fun peek(): HeadsetDelivery<T>? = events.firstOrNull()
+    @Synchronized
     fun enqueue(address: String, kind: HeadsetEventKind, elapsed: Long, payload: T): Boolean {
         val key = address.uppercase()
         if (key.isBlank() || elapsed < (latestTimes[key] ?: Long.MIN_VALUE)) return false
@@ -30,18 +49,26 @@ internal class HeadsetDeliveryQueue<T>(private val capacity: Int = 16) {
             if (index < 0) return false
             events.removeAt(index)
         }
-        events.add(HeadsetDelivery(++nextId, key, kind, elapsed, payload))
+        val entry = HeadsetDelivery(++nextId, key, kind, elapsed, payload)
+        events.add(entry)
+        val state = latestState.getOrPut(key) { linkedMapOf() }
+        if (kind == HeadsetEventKind.CONNECT || kind == HeadsetEventKind.DISCONNECT) state.clear()
+        state[kind] = entry
+        if (latestState.size > 16) latestState.remove(latestState.keys.first())
         if (latestTimes.size > 32) latestTimes.remove(latestTimes.keys.first())
         if (disconnectedAt.size > 32) disconnectedAt.remove(disconnectedAt.keys.first())
         return true
     }
+    @Synchronized
     fun protectHead(): HeadsetDelivery<T>? = peek()?.also { protectedId = it.id }
+    @Synchronized
     fun acknowledge(id: Long): Boolean {
         if (peek()?.id != id) return false
         events.removeAt(0); protectedId = null
         return true
     }
-    fun clear() { events.clear(); protectedId = null; latestTimes.clear(); disconnectedAt.clear() }
+    @Synchronized
+    fun clear() { events.clear(); protectedId = null; latestTimes.clear(); disconnectedAt.clear(); latestState.clear() }
 }
 
 internal class HeadsetDeliveryRetry(private val maxFailures: Int = 5) {
