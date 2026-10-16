@@ -30,7 +30,13 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 
 > 当前统一版已集成下列 17 个型号，所有型号使用同一个 APK，不再按型号单独分发测试包。
 
-## 1.9.0.2-rc2（当前测试版）
+## 1.9.0.2-rc3（当前测试版）
+
+- 选择性移植上游 `59d5fa8`：RFCOMM 音频服务过滤、A2DP 精确回调签名与备用方法名、蓝牙别名展示和改名刷新。
+- 保留 ColorOS 双 Profile 会话、唤醒、图片和流体云链路，不带回 HyperOS 私有集成；详见 [移植范围与验证边界](docs/upstream-selective-port-20261016.md)。
+- 551 项单元测试通过，Lint 无错误，Release 构建及设备测试代码编译通过；本轮未做实机验证。使用原有固定发布签名，versionCode 26，作为 Pre-release 发布、不设为正式 Latest。详见 [RC3 发布说明](.github/release-notes/1.9.0.2-rc3.md)。
+
+## 1.9.0.2-rc2（前一测试候选）
 
 - 包含下述双 Profile 会话及有界重试修复，并补齐热重载时未确认事件的交接。
 - 恢复时核对实际音频连接，已全断开则清理旧快照，未知状态不误清理；尚未读到电量的 HFP-only 会话也保留地址。

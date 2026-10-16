@@ -6,6 +6,9 @@ object HuaweiPodsAction {
     private const val PREFIX = "chen.action.huaweipods.coloros"
 
     const val EXTRA_DEVICE_ROUTE = "device_route"
+    /** Display only: never use a custom alias to select the model or protocol. */
+    const val EXTRA_DEVICE_DISPLAY_NAME = "device_display_name"
+    const val EXTRA_PRESENTATION_ONLY = "presentation_only"
     const val EXTRA_FREECLIP2_AUDIO_KIND = "freeclip2_audio_kind"
     const val EXTRA_FREECLIP2_AUDIO_VALUE = "freeclip2_audio_value"
     const val EXTRA_FREECLIP2_SPATIAL_MODE = "spatial_mode"

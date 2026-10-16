@@ -35,6 +35,7 @@ import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.platform.RomFamily
 import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.utils.PodImageLoader
+import moe.chenxy.huaweipods.utils.resolveBluetoothDisplayName
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 
@@ -265,10 +266,11 @@ class ColorOsLiveAlertReceiver : BroadcastReceiver() {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentTitle(
-                intent.getStringExtra("device_name")
-                    ?.takeIf(String::isNotBlank)
-                    ?: route?.displayName
-                    ?: context.getString(R.string.coloros_live_alert_fallback_title),
+                resolveBluetoothDisplayName(
+                    alias = intent.getStringExtra(HuaweiPodsAction.EXTRA_DEVICE_DISPLAY_NAME),
+                    name = intent.getStringExtra("device_name"),
+                    fallback = route?.displayName ?: context.getString(R.string.coloros_live_alert_fallback_title),
+                ),
             )
             .setContentText(contentText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))

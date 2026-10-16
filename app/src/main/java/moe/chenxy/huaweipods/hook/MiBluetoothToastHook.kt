@@ -24,6 +24,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import moe.chenxy.huaweipods.utils.ModuleResourceResolver
 import moe.chenxy.huaweipods.utils.PodImageLoader
+import moe.chenxy.huaweipods.utils.notificationDisplayName
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 import moe.chenxy.huaweipods.config.NotificationPresentationPolicy
@@ -234,11 +235,8 @@ object MiBluetoothToastHook : HookContext() {
                     Log.d("HuaweiPods", "skip persistent notification: disabled")
                     return
                 }
-                var alias: String? = bluetoothDevice.alias
-                if (alias?.isEmpty() == true) {
-                    alias = bluetoothDevice.name
-                }
-                val deviceName = alias ?: bluetoothDevice.name.orEmpty()
+                val displayName = bluetoothDevice.notificationDisplayName()
+                val deviceName = runCatching { bluetoothDevice.name }.getOrNull().orEmpty()
                 if (!ModuleResourceResolver.isCurrentModuleBuild(context)) {
                     cancelNotificationForAddress(address, context)
                     Log.w("HuaweiPods", "skip notification: stale Hook build")
@@ -291,7 +289,7 @@ object MiBluetoothToastHook : HookContext() {
                 notificationManager.createNotificationChannel(
                     NotificationChannel(
                         "BTHeadset$address",
-                        alias,
+                        displayName,
                         NotificationManager.IMPORTANCE_DEFAULT
                     ).apply {
                         setSound(null, null)
@@ -341,8 +339,8 @@ object MiBluetoothToastHook : HookContext() {
                 val notification = Notification.Builder(context, "BTHeadset$address")
                     .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
                     .setWhen(0L)
-                    .setTicker(alias)
-                    .setContentTitle(alias)
+                    .setTicker(displayName)
+                    .setContentTitle(displayName)
                     .setContentText(contentText)
                     .setContentIntent(pendingIntent)
                     .setDeleteIntent(deleteIntent(context, bluetoothDevice))
@@ -372,10 +370,7 @@ object MiBluetoothToastHook : HookContext() {
             val bluetoothDevice = runCatching {
                 BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(address)
             }.getOrNull() ?: return
-            val deviceName = runCatching {
-                bluetoothDevice.alias?.takeIf(String::isNotBlank)
-                    ?: bluetoothDevice.name?.takeIf(String::isNotBlank)
-            }.getOrNull() ?: "HuaweiPods"
+            val deviceName = bluetoothDevice.notificationDisplayName()
             if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return
             val moduleResources = ModuleResourceResolver.resources(context) ?: return
 
@@ -432,9 +427,7 @@ object MiBluetoothToastHook : HookContext() {
             if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return
             val moduleResources = ModuleResourceResolver.resources(context) ?: return
             val address = device?.address.orEmpty()
-            val deviceName = runCatching {
-                device?.alias?.takeIf(String::isNotBlank) ?: device?.name?.takeIf(String::isNotBlank)
-            }.getOrNull() ?: "HuaweiPods"
+            val deviceName = device.notificationDisplayName()
             val levels = lowEarbuds.joinToString("  ") { (isLeft, level) ->
                 val label = moduleResources.getString(
                     if (isLeft) R.string.batt_left_pod else R.string.batt_right_pod,
@@ -573,17 +566,14 @@ object MiBluetoothToastHook : HookContext() {
             }
 
             val moduleResources = ModuleResourceResolver.resources(context)
-            val bluetoothName = runCatching {
-                bluetoothDevice.alias?.takeIf(String::isNotBlank)
-                    ?: bluetoothDevice.name?.takeIf(String::isNotBlank)
-            }.getOrNull()
+            val bluetoothName = runCatching { bluetoothDevice.name }.getOrNull()
             val deviceRoute = DeviceRoutePrefs.resolve(prefs, address, bluetoothName)
             if (!deviceRoute.isSupported) {
                 createPodsHeadsUpNotification(address, context, batteryParams)
                 officialPopupShownAddresses.add(address)
                 return
             }
-            val deviceName = bluetoothName ?: deviceRoute.displayName
+            val deviceName = bluetoothDevice.notificationDisplayName()
             // 缓存官方图缺失时，快速设备连接进程按该资源名加载机型内置图，而不是固定用 FreeClip 图。
             val fallbackDrawableName = moduleResources?.let { resources ->
                 runCatching {
@@ -703,6 +693,9 @@ object MiBluetoothToastHook : HookContext() {
                                         return@runCatching
                                     }
                                     createPodsNotification(device, context, batteryParams)
+                                    // A rename changes presentation, not battery/case state. Do not
+                                    // replay low-battery alerts or reopen the connection popup.
+                                    if (intent.getBooleanExtra(HuaweiPodsAction.EXTRA_PRESENTATION_ONLY, false)) return@runCatching
                                     runCatching { maybeShowLowBatteryReminder(device, context, batteryParams) }
                                         .onFailure { Log.w("HuaweiPods", "Low battery reminder failed", it) }
                                     if (isColorOsHost) {

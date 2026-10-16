@@ -14,10 +14,12 @@ object MiuiStrongToastUtil {
         context: Context,
         batteryParams: BatteryParams,
         device: BluetoothDevice,
+        presentationOnly: Boolean = false,
     ) {
         val intent = Intent(HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION)
         intent.putExtra("batteryParams", batteryParams)
         intent.putExtra("device", device)
+        intent.putExtra(HuaweiPodsAction.EXTRA_PRESENTATION_ONLY, presentationOnly)
         intent.`package` = notificationHostPackage()
         context.sendBroadcast(intent)
     }

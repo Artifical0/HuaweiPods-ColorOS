@@ -97,7 +97,11 @@ object HeadsetStateDispatcher : HookContext() {
             Log.e("HuaweiPods", "A2dpService startup restore hook failed", it)
         }
 
-        hookAfter(findMethodByParamCount("com.android.bluetooth.a2dp.A2dpService", "handleConnectionStateChanged", 3)) {
+        val connectionMethod = findA2dpConnectionCallback(
+            findClass("com.android.bluetooth.a2dp.A2dpService"), BluetoothDevice::class.java,
+        )
+        Log.i("HuaweiPods", "A2DP connection callback=${connectionMethod.name}")
+        hookAfter(connectionMethod) {
             val currState = args[2] as Int
             val fromState = args[1] as Int
             val device = args[0] as BluetoothDevice?

@@ -28,6 +28,8 @@ import moe.chenxy.huaweipods.utils.miuiStrongToast.MiuiStrongToastUtil
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.PodParams
+import moe.chenxy.huaweipods.utils.notificationDisplayName
+import moe.chenxy.huaweipods.utils.shouldRefreshBluetoothDisplayName
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.normalizedEarbudAvailability
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
@@ -274,6 +276,17 @@ object HuaweiHfpController {
                         freeBuds3SnapshotStore.clearForAddress(it, changedDevice.address)
                     }
                     Log.i(TAG, "FreeBuds 3 cached state cleared after unbond device=${changedDevice.address}")
+                }
+                return
+            }
+            if (action == BluetoothDevice.ACTION_ALIAS_CHANGED || action == BluetoothDevice.ACTION_NAME_CHANGED) {
+                val changedDevice = receivedIntent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                synchronized(sessionStateLock) {
+                    if (shouldRefreshBluetoothDisplayName(device?.address, changedDevice?.address, currentBattery != null)) {
+                        // Presentation only: do not start a session or turn cached battery into a fresh reading.
+                        currentBattery?.let { sendBattery(it, cached = true) }
+                        restoreCurrentNotification(presentationOnly = true)
+                    }
                 }
                 return
             }
@@ -2044,7 +2057,7 @@ object HuaweiHfpController {
         }
     }
 
-    private fun restoreCurrentNotification() {
+    private fun restoreCurrentNotification(presentationOnly: Boolean = false) {
         val currentContext = context ?: return
         val currentDevice = device ?: return
         val battery = currentBattery ?: return
@@ -2052,6 +2065,7 @@ object HuaweiHfpController {
             currentContext,
             battery,
             currentDevice,
+            presentationOnly = presentationOnly,
         )
     }
 
@@ -2232,6 +2246,8 @@ object HuaweiHfpController {
         if (receiverRegistered) return
         ctx.registerReceiver(receiver, IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+            addAction(BluetoothDevice.ACTION_ALIAS_CHANGED)
+            addAction(BluetoothDevice.ACTION_NAME_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_UI_INIT)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_REFRESH_STATUS)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_ANC_SELECT)
@@ -2461,6 +2477,7 @@ object HuaweiHfpController {
             currentDevice?.let {
                 putExtra("address", it.address)
                 putExtra("device_name", it.name ?: it.alias ?: "")
+                putExtra(HuaweiPodsAction.EXTRA_DEVICE_DISPLAY_NAME, it.notificationDisplayName())
             }
             fill()
             setPackage(BuildConfig.APPLICATION_ID)
@@ -2484,6 +2501,7 @@ object HuaweiHfpController {
                 currentDevice?.let {
                     putExtra("address", it.address)
                     putExtra("device_name", it.name ?: it.alias ?: "")
+                    putExtra(HuaweiPodsAction.EXTRA_DEVICE_DISPLAY_NAME, it.notificationDisplayName())
                 }
                 fill()
                 setPackage(targetPackage)

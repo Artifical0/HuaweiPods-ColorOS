@@ -14,6 +14,10 @@ class HeadsetHotReloadParcelTest {
             putExtra("address", "AA:BB:CC:DD:EE:01")
             putExtra("left_battery", 80)
             putExtra("left_connected", true)
+            putExtra("device_name", "HUAWEI FreeClip")
+            putExtra(HuaweiPodsAction.EXTRA_DEVICE_DISPLAY_NAME, "我的 🎧")
+            putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, "HUAWEI_FREECLIP")
+            putExtra("state_cached", true)
             putExtra("status", BatteryParams(left = PodParams(80, false, true), right = null, case = null))
         }
         val saved = snapshotHeadsetLifecycleIntent(original)
@@ -29,6 +33,10 @@ class HeadsetHotReloadParcelTest {
             assertEquals(saved.action, restored.action)
             assertEquals("AA:BB:CC:DD:EE:01", restored.getStringExtra("address"))
             assertEquals(80, restored.getIntExtra("left_battery", -1))
+            assertEquals("HUAWEI FreeClip", restored.getStringExtra("device_name"))
+            assertEquals("我的 🎧", restored.getStringExtra(HuaweiPodsAction.EXTRA_DEVICE_DISPLAY_NAME))
+            assertEquals("HUAWEI_FREECLIP", restored.getStringExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE))
+            assertTrue(restored.getBooleanExtra("state_cached", false))
             assertFalse(restored.hasExtra("status"))
         } finally { parcel.recycle() }
     }

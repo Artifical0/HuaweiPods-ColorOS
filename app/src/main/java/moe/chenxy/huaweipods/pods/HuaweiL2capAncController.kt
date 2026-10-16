@@ -515,7 +515,7 @@ object HuaweiL2capAncController {
 
         device.uuids.orEmpty()
             .mapNotNull { it?.uuid }
-            .filter { it != SPP_UUID }
+            .filter { it != SPP_UUID && HuaweiRfcommServicePolicy.isControlCandidate(it) }
             .forEach { uuid ->
                 add("secure-sdp-$uuid") { device.createRfcommSocketToServiceRecord(uuid) }
                 add("insecure-sdp-$uuid") { device.createInsecureRfcommSocketToServiceRecord(uuid) }
