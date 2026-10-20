@@ -22,7 +22,15 @@ HuaweiPods ColorOS is an Android 15+ Xposed module with the independent applicat
 
 > The My Devices entry supports both the ColorOS 16.1 (`com.heytap.mydevices` 17.4.15) and ColorOS 17 (17.25.10) detail pages. The ColorOS 17 work was checked statically against OnePlus PLK110 `PLK110_17.0.0.102(CN01)` firmware and still needs on-device verification. Private hosts change between system updates; unknown builds fall back to the stock pages while keeping the module UI, Live Alerts, and the standard Bluetooth detail page.
 
-The unified build supports the 17 models below in one APK. Model-specific test APKs are no longer distributed.
+The unified build supports the 19 models below in one APK. Model-specific test APKs are no longer distributed; newly added models still need ColorOS device testing.
+
+## 1.9.1.1 (current stable release)
+
+- Adds FreeBuds 6 model recognition, official image identity, captured ANC levels and a dedicated controls page; keeps FreeBuds 6 distinct from 6i.
+- Adds FreeClip 2 Collector Edition product identity `000173`, separate from ordinary `000167` images. FreeClip 2 gains confirmed nod/shake call actions and noisy-environment volume-boost readback, replacing the incorrect quality-priority label. Bundled family illustrations remain the fallback until official images are available.
+- Routes generic low-latency writes and 6i / SE 4 ANC EQ/wind controls through the Bluetooth host. Manual changes invalidate older auto-enable writes and callbacks; outstanding requests are bounded and expire after eight seconds.
+- Preserves ColorOS lifecycle, image isolation and sender checks. No HyperOS private UI or unverified SE 4 ANC adaptive-ANC command is imported. New models and cross-process paths still require real-device testing; no device was installed or restarted in this step.
+- Local verification: 577 unit tests passed, Lint had no errors, and Release assembly plus Android-test compilation succeeded. VersionCode 27 uses the existing fixed distribution certificate, not the local Debug certificate. This is published to the stable channel on GitHub and the independent LSPosed module repository; new models still need ColorOS device testing. See the [release notes and limitations](.github/release-notes/1.9.1.1.md).
 
 ## 1.9.0.1
 
@@ -67,13 +75,15 @@ Versions from 1.8.1-coloros.2 use a stable release key and support in-place upda
 | HUAWEI FreeBuds 5i | Extended support | Battery, transparency/ANC/off readback, Smart/Light/Balanced/Deep ANC levels, left/right double-tap, wear detection, four official sound presets, high-quality audio, low-latency auto-apply, and official color images; long-press and swipe settings remain pending |
 | HUAWEI FreeBuds SE 4 ANC | Extended support | Battery, transparency/ANC/off readback, Light/Balanced/Deep ANC levels, wind-noise reduction, four official sound presets, a 10-band custom EQ, low-latency auto-apply, and official color images; gesture settings remain pending |
 | HUAWEI FreeBuds 6i | Extended support | Battery, transparency/ANC/off, four ANC levels, voice transparency, double/triple-tap gestures, four official sound presets, a 10-band custom EQ, low-latency auto-apply, and dedicated images |
+| HUAWEI FreeBuds 6 | Extended support, not device-tested on ColorOS | Battery, official image identity, Smart/Light/Balanced ANC with readback, adaptive volume, drop alerts, wear detection, case tones, confirmed sound presets and low-latency readback; no transparency or Deep ANC |
 | HUAWEI FreeBuds Pro 3 | Extended support | Battery, three-mode control and readback, four ANC levels, voice transparency, long-press/pinch/swipe gestures, and low-latency auto-apply |
 | HUAWEI FreeBuds Pro 4 | Basic support | Battery and ANC/off; no verified ANC state readback or gesture settings |
 | HUAWEI FreeBuds Pro 5 | Extended support | Battery, three-mode readback, four ANC levels, standard/voice/adaptive transparency, triple-tap/pinch/swipe-volume gestures, wear detection, adaptive volume, head-motion and voice controls, spatial audio, nine Yuezhang/scene/AI sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device connection, case-open sound, and ear-tip material |
 | HUAWEI FreeBuds 7 | Extended support | Battery and official images, three ANC levels with readback, spatial audio, double/triple-tap, pinch and swipe settings, wear detection, eight sound effects, a 10-band EQ, high-quality audio, low latency, and selected smart settings; protocol verified upstream on HyperOS ([validation scope](docs/FREEBUDS7_ADAPTATION.md), Chinese), not yet on ColorOS |
 | HUAWEI FreeBuds 7i | Extended support | Battery, transparency/ANC/off readback, four ANC levels, double/triple-tap, long-press and swipe-volume gestures, wear detection, head-motion control, spatial audio, four sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device list management, and official color images |
 | HUAWEI FreeClip | Extended support | Left/right/case battery, double/triple-tap gestures, wear detection, adaptive left/right earbuds, drop reminder, four official sound presets, and low-latency auto-apply; no traditional ANC or custom EQ |
-| HUAWEI FreeClip 2 | Extended support | Battery, double/triple-tap and swipe gestures, spatial audio, low-latency auto-apply, and selected wearing/audio settings; no traditional ANC |
+| HUAWEI FreeClip 2 | Extended support | Battery, double/triple-tap and swipe gestures, spatial audio, low-latency auto-apply, and selected wearing/audio settings; new nod/shake actions and noisy-environment volume-boost readback still need ColorOS device testing; no traditional ANC |
+| HUAWEI FreeClip 2 Collector Edition | Extended support, not device-tested on ColorOS | Separate product/color image identity, shared FreeClip 2 controls including head actions and volume boost; bundled family illustration until official images are available |
 | HUAWEI FreeArc | Extended support | Left/right/case battery, double/triple-tap, press-and-hold and swipe gestures, five official sound presets, a 10-band custom EQ, and official color images; no traditional ANC |
 | HUAWEI Eyewear (1st generation) | Basic support | Left/right temple battery and system UI integration; no ANC |
 | HUAWEI Eyewear 2 | Basic support | Left/right temple battery, double-tap/swipe gestures, and low-latency auto-apply; no ANC |

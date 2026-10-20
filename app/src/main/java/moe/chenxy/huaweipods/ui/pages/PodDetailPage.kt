@@ -392,6 +392,14 @@ private fun LazyListScope.podControlItems(
         }
     }
 
+    if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS6) {
+        item {
+            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
+                moe.chenxy.huaweipods.ui.components.FreeBuds6Controls(connectedDeviceAddress)
+            }
+        }
+    }
+
     if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5) {
         item {
             Card(
@@ -430,6 +438,7 @@ private fun LazyListScope.podControlItems(
     if (deviceRoute.supportsLowLatencyControl &&
         deviceRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS5 &&
         deviceRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS5I &&
+        deviceRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6 &&
         deviceRoute != HuaweiDeviceRoute.HUAWEI_FREECLIP &&
         deviceRoute != HuaweiDeviceRoute.HUAWEI_FREECLIP2 &&
         deviceRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS7I &&

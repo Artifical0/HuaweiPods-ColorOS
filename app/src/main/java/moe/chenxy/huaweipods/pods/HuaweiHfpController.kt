@@ -97,6 +97,7 @@ object HuaweiHfpController {
     private var sessionGeneration = 0L
     private var lowLatencyAutoApplyRequest: LowLatencyAutoApplyRequest? = null
     private var lowLatencyAppliedGeneration: Long? = null
+    private val lowLatencyWritePolicy = LowLatencyWritePolicy()
     private val freeClip2AudioStateTracker = FreeClip2AudioStateTracker()
     private val freeBuds3SnapshotStore = FreeBuds3StateSnapshotStore()
     private val sessionStateLock = Any()
@@ -180,6 +181,7 @@ object HuaweiHfpController {
         cancelAutoLowLatency()
         synchronized(sessionStateLock) {
             sessionGeneration++
+            lowLatencyWritePolicy.resetSession()
             freeClip2AudioStateTracker.reset()
         }
         val receiverContext = context
@@ -376,6 +378,19 @@ object HuaweiHfpController {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
                     setLowLatency(receivedIntent)
                 }
+                HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST -> {
+                    if (sentFromPackage != BuildConfig.APPLICATION_ID ||
+                        !targetsCurrentSession(receivedIntent, requireAddress = true)) return
+                    val currentContext = context ?: return
+                    val currentDevice = device ?: return
+                    val route = sessionRoute
+                    val generation = sessionGeneration
+                    val address = currentDevice.address
+                    HuaweiSharedControlHost.handle(
+                        currentContext, currentDevice, route, receivedIntent,
+                        writeLowLatency = { enabled, complete -> setLowLatency(enabled, complete) },
+                    ) { isCurrentSession(generation, address, route) }
+                }
                 HuaweiPodsAction.ACTION_HUAWEI_WEAR_DETECTION_SET -> {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
                     setWearDetection(receivedIntent)
@@ -515,6 +530,7 @@ object HuaweiHfpController {
             currentDeviceInfoIdentity = null
             cancelAutoLowLatency()
             sessionGeneration++
+            lowLatencyWritePolicy.resetSession()
             synchronized(sessionStateLock) { freeClip2AudioStateTracker.reset() }
             mainHandler.removeCallbacks(freeClip2AudioConfirmationRunnable)
             cancelPendingSmartAudioSpatialWrite()
@@ -1408,6 +1424,7 @@ object HuaweiHfpController {
             cancelPendingSmartAudioAudioQuery()
             currentInEar = null
             sessionGeneration++
+            lowLatencyWritePolicy.resetSession()
             Log.i(
                 TAG,
                 "Huawei session switched from=${previousDevice?.address} to=${device.address} route=$route",
@@ -1517,6 +1534,7 @@ object HuaweiHfpController {
      * 因此仅在用户明确开启自动保持后，于物理连接稳定后重新发送一次已验证的开启命令。
      */
     private fun scheduleAutoLowLatency() {
+        if (lowLatencyWritePolicy.autoToken() == null) return
         val currentDevice = device ?: return
         val requestedRoute = sessionRoute
         if (!LowLatencyPrefs.isAutoApplyEnabled(currentDevice.address, requestedRoute)) {
@@ -1542,6 +1560,7 @@ object HuaweiHfpController {
 
     private fun applyAutoLowLatency() {
         val request = lowLatencyAutoApplyRequest ?: return
+        val token = lowLatencyWritePolicy.autoToken() ?: return
         val currentContext = context ?: return cancelAutoLowLatency()
         val currentDevice = device ?: return cancelAutoLowLatency()
         if (!matchesLowLatencyAutoApplyRequest(request)) return cancelAutoLowLatency()
@@ -1582,11 +1601,12 @@ object HuaweiHfpController {
                 LOW_LATENCY_AUTO_APPLY_RETRY_DELAY_MS,
             )
         }
-        HuaweiLowLatencyController.setEnabled(
+        HuaweiLowLatencyController.sendInHost(
             context = currentContext,
             device = currentDevice,
             route = request.route,
             enabled = true,
+            shouldWrite = { lowLatencyWritePolicy.canAutoWrite(token) },
             onComplete = onComplete,
         )
     }
@@ -1606,33 +1626,41 @@ object HuaweiHfpController {
     }
 
     private fun setLowLatency(intent: Intent) {
-        val currentContext = context ?: return
-        val currentDevice = device ?: return
-        val requestedRoute = sessionRoute
-        if (!requestedRoute.supportsLowLatencyControl ||
-            !intent.hasExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED)
-        ) {
-            Log.w(TAG, "Huawei low-latency command ignored route=$requestedRoute")
-            return
-        }
-        val requestedEnabled = intent.getBooleanExtra(
+        if (!intent.hasExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED)) return
+        setLowLatency(intent.getBooleanExtra(
             HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED,
             false,
-        )
+        ))
+    }
+
+    private fun setLowLatency(requestedEnabled: Boolean, complete: (Boolean) -> Unit = {}) {
+        val currentContext = context
+        val currentDevice = device
+        val requestedRoute = sessionRoute
+        if (currentContext == null || currentDevice == null || !requestedRoute.supportsLowLatencyControl) {
+            complete(false)
+            return
+        }
+        val token = lowLatencyWritePolicy.beginManual()
+        cancelAutoLowLatency()
         val requestedAddress = currentDevice.address
         val requestedGeneration = sessionGeneration
         val previousDesired = LowLatencyPrefs.desiredForHook(
             requestedAddress,
             requestedRoute,
         ) ?: false
-        HuaweiLowLatencyController.setEnabled(
+        HuaweiLowLatencyController.sendInHost(
             context = currentContext,
             device = currentDevice,
             route = requestedRoute,
             enabled = requestedEnabled,
+            shouldWrite = { lowLatencyWritePolicy.isCurrent(token) },
         ) { success ->
-            if (!isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
-                return@setEnabled
+            if (!lowLatencyWritePolicy.finishManual(token) ||
+                !isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)
+            ) {
+                complete(false)
+                return@sendInHost
             }
             val effectiveEnabled = if (success) {
                 LowLatencyPrefs.setDesiredFromHook(
@@ -1650,6 +1678,7 @@ object HuaweiHfpController {
                 previousDesired
             }
             sendLowLatencyState(effectiveEnabled, writeSuccess = success)
+            complete(success)
             Log.i(
                 TAG,
                 "Huawei low-latency write route=$requestedRoute enabled=$requestedEnabled " +
@@ -2268,6 +2297,7 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_PRESET_SET)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_REFRESH)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_RESULT)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_QUERY_RESULT)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_STATE)

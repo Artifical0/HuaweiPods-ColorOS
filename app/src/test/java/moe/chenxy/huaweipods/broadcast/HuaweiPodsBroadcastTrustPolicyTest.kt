@@ -7,6 +7,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HuaweiPodsBroadcastTrustPolicyTest {
+    @Test fun sharedControlKeepsRequestAndResultInSeparateTrustDomains() {
+        assertEquals(BroadcastActionDomain.APP_CONTROL,
+            HuaweiPodsBroadcastTrustPolicy.resolveDomain(HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST))
+        assertEquals(BroadcastActionDomain.BLUETOOTH_STATE,
+            HuaweiPodsBroadcastTrustPolicy.resolveDomain(HuaweiPodsAction.ACTION_SHARED_CONTROL_RESULT))
+        assertFalse(HuaweiPodsBroadcastTrustPolicy.shouldAcceptBroadcast(HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST, "untrusted"))
+        assertFalse(HuaweiPodsBroadcastTrustPolicy.shouldAcceptBroadcast(HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST, HuaweiPodsBroadcastTrustPolicy.PACKAGE_HEYTAP_MYDEVICES))
+        assertFalse(HuaweiPodsBroadcastTrustPolicy.shouldAcceptBroadcast(HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST, HuaweiPodsBroadcastTrustPolicy.PACKAGE_BLUETOOTH))
+        assertTrue(HuaweiPodsBroadcastTrustPolicy.shouldAcceptBroadcast(HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST, HuaweiPodsBroadcastTrustPolicy.PACKAGE_APP))
+        assertFalse(HuaweiPodsBroadcastTrustPolicy.shouldAcceptBroadcast(HuaweiPodsAction.ACTION_SHARED_CONTROL_RESULT, HuaweiPodsBroadcastTrustPolicy.PACKAGE_APP))
+        assertTrue(HuaweiPodsBroadcastTrustPolicy.shouldAcceptBroadcast(HuaweiPodsAction.ACTION_SHARED_CONTROL_RESULT, HuaweiPodsBroadcastTrustPolicy.PACKAGE_BLUETOOTH))
+    }
 
     @Test
     fun `trusted App control senders should pass all control requests`() {

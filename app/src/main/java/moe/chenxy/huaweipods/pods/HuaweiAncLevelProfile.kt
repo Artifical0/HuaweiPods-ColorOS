@@ -52,6 +52,7 @@ private val freeBudsSe4AncOptions = listOf(
 internal val HuaweiDeviceRoute.ancLevelOptions: List<HuaweiAncLevelOption>
     get() = when (this) {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS6,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7,
         -> freeBuds5AncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> freeBuds4eAncOptions

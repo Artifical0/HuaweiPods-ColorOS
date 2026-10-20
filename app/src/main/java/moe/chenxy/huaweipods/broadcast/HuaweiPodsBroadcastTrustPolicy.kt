@@ -104,6 +104,7 @@ object HuaweiPodsBroadcastTrustPolicy {
             HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH,
             HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_PRESET_SET,
             HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_REFRESH,
+            HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST,
             HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND,
             HuaweiPodsAction.ACTION_COLOROS_POPUP_HOST_PROBE,
             HuaweiPodsAction.ACTION_PREVIEW_LOW_BATTERY_REMINDER,
@@ -122,6 +123,7 @@ object HuaweiPodsBroadcastTrustPolicy {
             HuaweiPodsAction.ACTION_HUAWEI_GESTURE_CHANGED,
             HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_CHANGED,
             HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_CHANGED,
+            HuaweiPodsAction.ACTION_SHARED_CONTROL_RESULT,
             HuaweiPodsAction.ACTION_DEVICE_ROUTE_PROBE_RESULT,
             HuaweiPodsAction.ACTION_MODULE_BLUETOOTH_SERVICE_ALIVE,
             HuaweiPodsAction.ACTION_MODULE_MI_BLUETOOTH_SERVICE_ALIVE,
@@ -170,6 +172,7 @@ object HuaweiPodsBroadcastTrustPolicy {
      */
     fun shouldAcceptBroadcast(action: String?, senderPackage: String?): Boolean {
         if (action.isNullOrBlank()) return false
+        if (action == HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST) return senderPackage == PACKAGE_APP
         return when (resolveDomain(action)) {
             BroadcastActionDomain.APP_CONTROL -> isTrustedAppControlSender(senderPackage)
             BroadcastActionDomain.BLUETOOTH_STATE -> isTrustedBluetoothStateSender(senderPackage)

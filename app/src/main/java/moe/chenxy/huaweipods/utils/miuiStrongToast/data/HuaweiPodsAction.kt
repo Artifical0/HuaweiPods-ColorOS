@@ -90,6 +90,8 @@ object HuaweiPodsAction {
     const val ACTION_HUAWEI_EQUALIZER_PRESET_SET = PREFIX + ".huawei_equalizer_preset_set"
     const val ACTION_HUAWEI_EQUALIZER_REFRESH = PREFIX + ".huawei_equalizer_refresh"
     const val ACTION_HUAWEI_EQUALIZER_CHANGED = PREFIX + ".huawei_equalizer_changed"
+    const val ACTION_SHARED_CONTROL_REQUEST = PREFIX + ".shared_control_request"
+    const val ACTION_SHARED_CONTROL_RESULT = PREFIX + ".shared_control_result"
     const val ACTION_HUAWEI_LOW_LATENCY_SET = PREFIX + ".huawei_low_latency_set"
     const val ACTION_HUAWEI_LOW_LATENCY_CHANGED = PREFIX + ".huawei_low_latency_changed"
     const val ACTION_HUAWEI_WEAR_DETECTION_SET = PREFIX + ".huawei_wear_detection_set"

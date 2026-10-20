@@ -7,6 +7,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HuaweiAncLevelProfileTest {
+    @Test fun freeBuds6KeepsCapturedAncLevelsSeparateFrom6iAndSe4() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS6
+        assertEquals(listOf(0x03, 0x01, 0x00), route.ancLevelOptions.map { it.protocolValue })
+        assertFalse(route.supportsTransparency)
+        assertFalse(route.supportsAncSubMode(0x02))
+        assertFalse(HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC.supportsAncSubMode(0x03))
+    }
     @Test
     fun `FreeBuds 4E exposes only light and balanced ANC levels`() {
         val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS4E
