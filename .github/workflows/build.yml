@@ -4,9 +4,24 @@ on:
   push:
     tags: [ "*-*" ]
     branches: [ "master", "main" ]
+    # 只改文档、文档站时不构建（tag 推送不受 paths 过滤影响，照常出发布）。
+    # PR 不加过滤：upstream_merge 靠 PR 检查结果决定是否合并，没有检查会当失败处理。
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "package.json"
+      - "package-lock.json"
+      - "wrangler.jsonc"
+      - "LICENSE*"
   pull_request:
     branches: [ "master", "main" ]
   workflow_dispatch:
+
+# 发版时同一提交会先因推送 main、再因推送 tag 各构建一次：tag 那次开始时取消还在跑的 main 那次。
+# 只有 tag 构建会取消别人；反过来 main 构建只排队，不会把出发布的 tag 构建取消掉。
+concurrency:
+  group: build-${{ github.sha }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
