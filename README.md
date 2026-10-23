@@ -14,7 +14,8 @@
 [下载安装](https://github.com/Artifical0/HuaweiPods-ColorOS/releases) ·
 [使用文档](https://huaweipods.npiter.de/) ·
 [赞助支持](docs/sponsor/index.md) ·
-[问题反馈](https://github.com/Artifical0/HuaweiPods-ColorOS/issues)
+[问题反馈](https://github.com/Artifical0/HuaweiPods-ColorOS/issues) ·
+[更新频道](https://t.me/ByteJuno)
 
 **简体中文** · **[English](README_EN.md)**
 
