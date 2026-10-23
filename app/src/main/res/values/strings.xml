@@ -171,8 +171,8 @@
     <string name="about_tab">About</string>
     <string name="about_hero_description">HuaweiPods ColorOS, version %1$s</string>
     <string name="about_developer_section">Developer</string>
-    <string name="about_developer_name">Artifical0</string>
-    <string name="about_developer_handle">@Artifical0 · ColorOS adaptation</string>
+    <string name="about_developer_name">ByteJuno</string>
+    <string name="about_developer_handle">@ByteJuno · ColorOS adaptation</string>
     <string name="about_source_code">Source Code</string>
     <string name="about_project_section">Project</string>
     <string name="about_module_section">Module</string>
@@ -249,7 +249,7 @@
     <string name="onboarding_ready_label">Setup complete</string>
     <string name="onboarding_ready_pair">Pair the earphones in system Bluetooth settings first</string>
     <string name="onboarding_ready_model">Model selection is normally automatic; choose it once only if detection fails</string>
-    <string name="onboarding_ready_group">For help or feedback, open an issue on GitHub: Artifical0/HuaweiPods-ColorOS</string>
+    <string name="onboarding_ready_group">For help or feedback, open an issue on GitHub: ByteJuno/HuaweiPods-ColorOS</string>
     <string name="huawei_equalizer_title">Custom equalizer</string>
     <string name="huawei_equalizer_summary">Reads the current earphone curve before editing</string>
 </resources>

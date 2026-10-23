@@ -36,16 +36,19 @@ internal data class ReleaseTag(
 
 object GitHubReleaseChecker {
     const val LATEST_RELEASE_API =
-        "https://api.github.com/repos/Artifical0/HuaweiPods-ColorOS/releases/latest"
+        "https://api.github.com/repos/ByteJuno/HuaweiPods-ColorOS/releases/latest"
     const val LATEST_RELEASE_PAGE =
-        "https://github.com/Artifical0/HuaweiPods-ColorOS/releases/latest"
+        "https://github.com/ByteJuno/HuaweiPods-ColorOS/releases/latest"
 
     private const val CONNECT_TIMEOUT_MS = 10_000
     private const val READ_TIMEOUT_MS = 10_000
     private const val MAX_RESPONSE_CHARS = 1_048_576
     internal const val MAX_CHANGELOG_CHARS = 32_768
-    private const val RELEASE_PATH_PREFIX = "/Artifical0/HuaweiPods-ColorOS/releases/"
-    private const val RELEASE_TAG_PATH_PREFIX = "${RELEASE_PATH_PREFIX}tag/"
+    // 2026-10 账号由 Artifical0 改名为 ByteJuno；旧路径仍可能出现在缓存的待更新记录里。
+    private val RELEASE_PATH_PREFIXES = listOf(
+        "/ByteJuno/HuaweiPods-ColorOS/releases/",
+        "/Artifical0/HuaweiPods-ColorOS/releases/",
+    )
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -96,10 +99,12 @@ object GitHubReleaseChecker {
         val uri = URI(releaseUrl)
         require(uri.query == null && uri.fragment == null) { "Unexpected release redirect suffix" }
         val path = uri.path
-        require(path.startsWith(RELEASE_TAG_PATH_PREFIX, ignoreCase = true)) {
+        val tagPrefix = RELEASE_PATH_PREFIXES.map { "${it}tag/" }
+            .firstOrNull { path.startsWith(it, ignoreCase = true) }
+        require(tagPrefix != null) {
             "Invalid GitHub release redirect"
         }
-        val tag = path.substring(RELEASE_TAG_PATH_PREFIX.length)
+        val tag = path.substring(tagPrefix.length)
         require(tag.isNotBlank() && tag == tag.trim() && '/' !in tag) {
             "Invalid GitHub release tag"
         }
@@ -119,7 +124,7 @@ object GitHubReleaseChecker {
         if (!uri.scheme.equals("https", ignoreCase = true)) return false
         if (!uri.host.equals("github.com", ignoreCase = true)) return false
         if (uri.port != -1 || uri.userInfo != null) return false
-        return uri.path.startsWith(RELEASE_PATH_PREFIX, ignoreCase = true)
+        return RELEASE_PATH_PREFIXES.any { uri.path.startsWith(it, ignoreCase = true) }
     }
 
     private fun checkBlocking(

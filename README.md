@@ -9,12 +9,12 @@
 [![Android 15+](https://img.shields.io/badge/Android-15%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://www.android.com/)
 [![ColorOS](https://img.shields.io/badge/ROM-ColorOS-1BA784?style=flat-square)](https://www.coloros.com/)
 [![LSPosed](https://img.shields.io/badge/Framework-LSPosed-6F42C1?style=flat-square)](https://github.com/LSPosed/LSPosed)
-[![License](https://img.shields.io/github/license/Artifical0/HuaweiPods-ColorOS?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/github/license/ByteJuno/HuaweiPods-ColorOS?style=flat-square)](LICENSE)
 
-[下载安装](https://github.com/Artifical0/HuaweiPods-ColorOS/releases) ·
+[下载安装](https://github.com/ByteJuno/HuaweiPods-ColorOS/releases) ·
 [使用文档](https://huaweipods.npiter.de/) ·
 [赞助支持](docs/sponsor/index.md) ·
-[问题反馈](https://github.com/Artifical0/HuaweiPods-ColorOS/issues) ·
+[问题反馈](https://github.com/ByteJuno/HuaweiPods-ColorOS/issues) ·
 [更新频道](https://t.me/ByteJuno)
 
 **简体中文** · **[English](README_EN.md)**
@@ -150,7 +150,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 
 ## 快速开始
 
-1. 从 [GitHub Releases](https://github.com/Artifical0/HuaweiPods-ColorOS/releases) 下载并安装 APK；首次打开可按引导检查 LSPosed 与核心作用域。
+1. 从 [GitHub Releases](https://github.com/ByteJuno/HuaweiPods-ColorOS/releases) 下载并安装 APK；首次打开可按引导检查 LSPosed 与核心作用域。
 2. 在 LSPosed 中启用 HuaweiPods。
 3. 按系统勾选作用域：
 
@@ -174,7 +174,7 @@ HuaweiPods ColorOS 是一个使用独立应用 ID `io.github.artifical0.huaweipo
 
 请勿直接公开包含设备地址、账号或其他个人信息的原始采集文件。提交前请检查并脱敏，完整流程见 [华为耳机协议采集指南](docs/DEBUG_CAPTURE_GUIDE.md)。
 
-可复现问题请提交至 [GitHub Issues](https://github.com/Artifical0/HuaweiPods-ColorOS/issues)。
+可复现问题请提交至 [GitHub Issues](https://github.com/ByteJuno/HuaweiPods-ColorOS/issues)。
 
 ## 构建
 
